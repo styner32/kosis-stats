@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"kosis/pkg/dart"
 	"log"
 	"net/http"
 	"net/url"
@@ -76,15 +77,30 @@ type KosisSearchErrorResponse struct {
 }
 
 func main() {
-	log.Printf("Starting KOSIS Stats")
-
-	// example: https://kosis.kr/openapi/statisticsSearch.do?method=getList&apiKey=MThjYWY3MTRlYTllNjFlOTk4N2U2MzlkYmQ4OWVmYWI=&format=json&jsonVD=Y&searchNm=%EC%9D%B8%EA%B5%AC&startCount=1&resultCount=5&sort=RANK
-	searchURL := "https://kosis.kr/openapi/statisticsSearch.do"
-
 	apiKey := os.Getenv("KOSIS_API_KEY")
 	if apiKey == "" {
 		log.Fatal("KOSIS_API_KEY is not set")
 	}
+
+	dartApiKey := os.Getenv("DART_API_KEY")
+	if dartApiKey == "" {
+		log.Fatal("DART_API_KEY is not set")
+	}
+
+	// getInfo(apiKey)
+	// lbh.Call(apiKey)
+
+	dartClient := dart.New(dartApiKey)
+	if err := dartClient.GetList(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func getInfo(apiKey string) {
+	log.Printf("Starting KOSIS Stats")
+
+	// example: https://kosis.kr/openapi/statisticsSearch.do?method=getList&apiKey=MThjYWY3MTRlYTllNjFlOTk4N2U2MzlkYmQ4OWVmYWI=&format=json&jsonVD=Y&searchNm=%EC%9D%B8%EA%B5%AC&startCount=1&resultCount=5&sort=RANK
+	searchURL := "https://kosis.kr/openapi/statisticsSearch.do"
 
 	method := "getList"
 	format := "json"
