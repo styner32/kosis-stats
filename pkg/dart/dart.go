@@ -3,15 +3,16 @@ package dart
 import (
 	"archive/zip"
 	"bytes"
-	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"kosis/pkg/xbrl"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
 	"strings"
-	"time"
 )
 
 const baseURL = "https://opendart.fss.or.kr/api"
@@ -40,37 +41,12 @@ type ListResp struct {
 	List    []List `json:"list"`
 }
 
-func New(apiKey string) *DartClient {
-	return &DartClient{
-		key: apiKey,
-		client: &http.Client{
-			Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{
-					// DART는 TLS1.2 호환이 확실 — TLS1.2로 고정해서 협상 단순화
-					MinVersion: tls.VersionTLS12,
-					MaxVersion: tls.VersionTLS12,
-
-					// SNI를 명시 (보통 자동이지만, 명시로 문제 회피)
-					ServerName: "opendart.fss.or.kr",
-
-					// 일부 구형 서버 대비 호환 암호군 지정 (필요 시)
-					CipherSuites: []uint16{
-						tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-						tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
-						tls.TLS_RSA_WITH_AES_128_GCM_SHA256,
-						tls.TLS_RSA_WITH_AES_256_GCM_SHA384,
-					},
-				},
-			},
-			Timeout: 20 * time.Second,
-		},
-	}
-}
+// defined error that document not found
+var ErrDocumentNotFound = errors.New("document not found")
 
 // 공시 목록 조회
 // https://opendart.fss.or.kr/guide/detail.do?apiGrpCd=DS001&apiId=2019001
 func (c *DartClient) getDisclosureList(apiKey, corpCode, bgnDe, endDe string, pageNo, pageCount int) (*ListResp, error) {
-
 	u, _ := url.Parse(baseURL + "/list.json")
 	q := u.Query()
 	q.Set("crtfc_key", apiKey) // API Key
@@ -139,6 +115,15 @@ func (c *DartClient) GetDocument(rceptNo string) (string, error) {
 		return "", fmt.Errorf("DART error %d: %s", resp.StatusCode, string(buf))
 	}
 
+	// check if mime type is application/zip
+	mimeType := resp.Header.Get("Content-Type")
+	if mimeType == "application/xml;charset=UTF-8" {
+		if strings.Contains(string(buf), "<status>014</status>") {
+			return "", ErrDocumentNotFound
+		}
+		return string(buf), nil
+	}
+
 	zr, err := zip.NewReader(bytes.NewReader(buf), int64(len(buf)))
 	if err != nil {
 		return "", err
@@ -163,14 +148,21 @@ func (c *DartClient) GetDocument(rceptNo string) (string, error) {
 
 func (c *DartClient) GetList() error {
 	// 삼성전자(00126380) 2025-01-01 ~ 2025-01-31 공시 100건
-	// LG화학(00356361)
-	res, err := c.getDisclosureList(c.key, "00356361", "20251001", "20251031", 1, 100)
+	// LG화학(00356361) 2025-10-01 ~ 2025-10-31 공시 100건
+	// 모든 회사
+	code := "" // 00126380: 삼성전자, 00356361: LG화학
+	res, err := c.getDisclosureList(c.key, code, "20251001", "20251031", 1, 10)
 	if err != nil {
 		return err
 	}
 
 	for _, it := range res.List {
 		if err := c.processDoc(it); err != nil {
+			if err == ErrDocumentNotFound {
+				log.Printf("document not found: %s %s %s %s", it.RceptDt, it.RceptNo, it.CorpName, it.ReportNm)
+				continue
+			}
+
 			return err
 		}
 	}
@@ -181,7 +173,9 @@ func (c *DartClient) GetList() error {
 // process doc
 func (c *DartClient) processDoc(it List) error {
 	fmt.Printf("%s %s %s %s\n", it.RceptDt, it.RceptNo, it.CorpName, it.ReportNm)
-	filename := fmt.Sprintf("data/receipts/%s.html", it.RceptNo)
+
+	folder := fmt.Sprintf("data/receipts/%s", it.CorpCode)
+	filename := fmt.Sprintf("%s/%s.html", folder, it.RceptNo)
 
 	// a file exists, skip and read the file
 	doc := ""
@@ -193,6 +187,13 @@ func (c *DartClient) processDoc(it List) error {
 
 		doc = string(b)
 	} else {
+		// create a folder if not exists
+		if _, err := os.Stat(folder); err != nil {
+			if err := os.MkdirAll(folder, 0755); err != nil {
+				return err
+			}
+		}
+
 		doc, err = c.GetDocument(it.RceptNo)
 		if err != nil {
 			return err
@@ -210,12 +211,31 @@ func (c *DartClient) processDoc(it List) error {
 		}
 	}
 
+	j, err := xbrl.ConvertXMLToUsefulJSON([]byte(doc))
+	if err != nil {
+		return err
+	}
+	fmt.Printf("Contents: %s\n", string(j))
+
 	if strings.Contains(it.ReportNm, "배당결정") {
 		dividend, err := ParseDividendHTML(doc)
 		if err != nil {
 			return err
 		}
 		fmt.Printf("dividend: %+v\n", dividend)
+
+		alotment, err := c.getAlotment(it.CorpCode, it.RceptDt[:4], HALF_YEAR)
+		if err != nil {
+			return err
+		}
+
+		b, err := json.MarshalIndent(alotment, "", "  ")
+		if err == nil {
+			fmt.Printf("alotment: %s\n", string(b))
+		} else {
+			fmt.Printf("alotment: %+v\n", alotment)
+		}
+
 		return nil
 	}
 

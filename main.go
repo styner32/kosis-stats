@@ -94,6 +94,23 @@ func main() {
 	if err := dartClient.GetList(); err != nil {
 		log.Fatal(err)
 	}
+
+	// data/receipts/01942952/20251015000221.html
+	// 20251015000218.xml
+	// data/receipts/01035942/20251015000213.html
+	// data/receipts/01878037/20251015000214.html
+	// data/receipts/01136001/20251015900291.html
+	// fileName := "data/receipts/01136001/20251015900291.html"
+	// file, err := os.ReadFile(fileName)
+	// if err != nil {
+	// 	log.Fatalf("Failed to read file: %v", err)
+	// }
+
+	// j, err := xbrl.ConvertXMLToUsefulJSON(file)
+	// if err != nil {
+	// 	log.Fatalf("Failed to parse XBRL to JSON: %v", err)
+	// }
+	// log.Printf("JSON: %s", string(j))
 }
 
 func getInfo(apiKey string) {
