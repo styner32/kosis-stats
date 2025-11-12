@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 )
 
 const baseURL = "https://opendart.fss.or.kr/api"
@@ -149,9 +150,12 @@ func (c *DartClient) GetDocument(rceptNo string) (string, error) {
 func (c *DartClient) GetList() error {
 	// 삼성전자(00126380) 2025-01-01 ~ 2025-01-31 공시 100건
 	// LG화학(00356361) 2025-10-01 ~ 2025-10-31 공시 100건
-	// 모든 회사
-	code := "" // 00126380: 삼성전자, 00356361: LG화학
-	res, err := c.getDisclosureList(c.key, code, "20251001", "20251031", 1, 10)
+	// 모든 회사 ""
+	code := "01515323" // 00126380: 삼성전자, 00356361: LG화학, 01515323: LG에너지솔루션
+	today := time.Now()
+	startDate := today.AddDate(0, 0, -90).Format("20060102")
+	endDate := today.Format("20060102")
+	res, err := c.getDisclosureList(c.key, code, startDate, endDate, 1, 100)
 	if err != nil {
 		return err
 	}
@@ -211,63 +215,19 @@ func (c *DartClient) processDoc(it List) error {
 		}
 	}
 
-	j, err := xbrl.ConvertXMLToUsefulJSON([]byte(doc))
+	j, err := xbrl.ParseHTML([]byte(doc))
 	if err != nil {
 		return err
 	}
-	fmt.Printf("Contents: %s\n", string(j))
 
-	if strings.Contains(it.ReportNm, "배당결정") {
-		dividend, err := ParseDividendHTML(doc)
-		if err != nil {
+	compactFolder := fmt.Sprintf("data/compact/%s", it.CorpCode)
+
+	if _, err := os.Stat(compactFolder); err != nil {
+		if err := os.MkdirAll(compactFolder, 0755); err != nil {
 			return err
 		}
-		fmt.Printf("dividend: %+v\n", dividend)
-
-		alotment, err := c.getAlotment(it.CorpCode, it.RceptDt[:4], HALF_YEAR)
-		if err != nil {
-			return err
-		}
-
-		b, err := json.MarshalIndent(alotment, "", "  ")
-		if err == nil {
-			fmt.Printf("alotment: %s\n", string(b))
-		} else {
-			fmt.Printf("alotment: %+v\n", alotment)
-		}
-
-		return nil
 	}
 
-	if strings.Contains(it.ReportNm, "타법인주식및출자증권처분결정") {
-		disposal, err := ParseDisposalHTML(doc, it.RceptNo)
-		if err != nil {
-			return err
-		}
-		b, err := json.MarshalIndent(disposal, "", "  ")
-		if err == nil {
-			fmt.Printf("disposal: %s\n", string(b))
-		} else {
-			fmt.Printf("disposal: %+v\n", disposal)
-		}
-		return nil
-	}
-
-	if strings.Contains(it.ReportNm, "타법인주식및출자증권취득결정") {
-		acquisition, err := ParseAcquisitionHTML(doc, it.RceptNo)
-		if err != nil {
-			return err
-		}
-
-		b, err := json.MarshalIndent(acquisition, "", "  ")
-		if err == nil {
-			fmt.Printf("acquisition: %s\n", string(b))
-		} else {
-			fmt.Printf("acquisition: %+v\n", acquisition)
-		}
-
-		return nil
-	}
-
-	return nil
+	compactFilename := fmt.Sprintf("%s/%s.json", compactFolder, it.RceptNo)
+	return os.WriteFile(compactFilename, j, 0644)
 }

@@ -111,6 +111,7 @@ type Node struct {
 type UsefulReport struct {
 	CompanyName   string       `json:"company_name,omitempty"`
 	ReportTitle   string       `json:"report_title,omitempty"`
+	CompanyCIK    string       `json:"company_cik,omitempty"`
 	Date          string       `json:"date,omitempty"`
 	Tables        [][][]string `json:"tables,omitempty"` // each table is rows of cells
 	KeyParagraphs []string     `json:"key_paragraphs,omitempty"`
@@ -125,9 +126,11 @@ type FactValue struct {
 	UnitRef    string `json:"unit_ref,omitempty"`
 }
 
-var reInvalidTag = regexp.MustCompile(`<[^\?\/A-Za-z_:][^>]*>`)
+var reXMLTag = regexp.MustCompile(`<\/?[^>]+>`)
 var reMeta = regexp.MustCompile(`(?i)<meta\b([^>]+)>`)
 var reBr = regexp.MustCompile(`(?i)<br\b([^>]+)>`)
+
+var xmlTagNames = []string{"COMPANY-NAME", "TABLE", "SECTION-2", "COVER-TITLE", "TD", "IMG-CAPTION", "TR", "TU", "TITLE", "THEAD", "LIBRARY", "DOCUMENT-NAME", "SECTION-3", "SUMMARY", "EXTRACTION", "BODY", "COLGROUP", "COL", "IMAGE", "DOCUMENT", "COVER", "TBODY", "IMG", "P", "TABLE-GROUP", "PGBRK", "TE", "SPAN", "FORMULA-VERSION", "SECTION-1", "TH", "A", "PART", "?xml", "CORRECTION"}
 
 // parseNode recursively builds a Node from the current xml.StartElement
 func parseNode(dec *xml.Decoder, start xml.StartElement) (*Node, error) {
@@ -236,7 +239,7 @@ func ConvertXMLToNode(xmlBytes []byte) (*Node, error) {
 		if start, ok := tok.(xml.StartElement); ok {
 			root, err := parseNode(dec, start)
 			if err != nil {
-				return nil, fmt.Errorf("error parsing xml tree: %w", err)
+				return nil, fmt.Errorf("error parsing xml tree for tag: %s: %w", start.Name.Local, err)
 			}
 			return root, nil
 		}
@@ -324,8 +327,27 @@ func ConvertXMLToUsefulJSON(xmlBytes []byte) ([]byte, error) {
 		cleanedXmlString = strings.ReplaceAll(cleanedXmlString, "&", "&amp;")
 	}
 
-	if reInvalidTag.MatchString(cleanedXmlString) {
-		cleanedXmlString = reInvalidTag.ReplaceAllString(cleanedXmlString, "")
+	if strings.Contains(cleanedXmlString, "<<") {
+		cleanedXmlString = strings.ReplaceAll(cleanedXmlString, "<<", "&lt;<")
+	}
+
+	if strings.Contains(cleanedXmlString, ">>") {
+		cleanedXmlString = strings.ReplaceAll(cleanedXmlString, ">>", ">&gt;")
+	}
+
+	if reXMLTag.MatchString(cleanedXmlString) {
+		matches := reXMLTag.FindAllStringSubmatch(cleanedXmlString, -1)
+		for _, match := range matches {
+			tagName := strings.TrimPrefix(match[0], "<")
+			tagName = strings.TrimPrefix(tagName, "/")
+			tagName = strings.Split(tagName, " ")[0]
+			tagName = strings.TrimSuffix(tagName, ">")
+
+			if !isValidTagName(tagName) {
+				fmt.Printf("unmatch: %s, %s\n", match[0], tagName)
+				cleanedXmlString = strings.ReplaceAll(cleanedXmlString, match[0], "")
+			}
+		}
 	}
 
 	if reMeta.MatchString(cleanedXmlString) {
@@ -388,4 +410,13 @@ func findAllByTags(n *Node, tags []string) []*Node {
 		result = append(result, findAll(n, tag)...)
 	}
 	return result
+}
+
+func isValidTagName(tagName string) bool {
+	for _, tag := range xmlTagNames {
+		if strings.EqualFold(tag, tagName) {
+			return true
+		}
+	}
+	return false
 }

@@ -1,10 +1,12 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
-	"kosis/pkg/dart"
+	"kosis/pkg/openai"
+	"kosis/pkg/xbrl"
 	"log"
 	"net/http"
 	"net/url"
@@ -90,27 +92,61 @@ func main() {
 	// getInfo(apiKey)
 	// lbh.Call(apiKey)
 
-	dartClient := dart.New(dartApiKey)
-	if err := dartClient.GetList(); err != nil {
-		log.Fatal(err)
-	}
+	// dartClient := dart.New(dartApiKey)
+	// if err := dartClient.GetList(); err != nil {
+	// 	log.Fatal(err)
+	// }
 
 	// data/receipts/01942952/20251015000221.html
 	// 20251015000218.xml
 	// data/receipts/01035942/20251015000213.html
 	// data/receipts/01878037/20251015000214.html
 	// data/receipts/01136001/20251015900291.html
-	// fileName := "data/receipts/01136001/20251015900291.html"
-	// file, err := os.ReadFile(fileName)
-	// if err != nil {
-	// 	log.Fatalf("Failed to read file: %v", err)
-	// }
+	// data/receipts/00127875/20251031000217.html
+	// data/receipts/00977377/20251031000579.html
+	// data/receipts/01960949/20251030000572.html
+	// data/receipts/00485177/20251031900992.html // 일진파워, 단일판매ㆍ공급계약체결
+	// data/receipts/01515323/20250814001590.html // LG에너지솔루션, 반기보고서 (2025.06)
+	analyzeCorrectionReport("data/receipts/01515323/", "20250814001590")
+}
 
-	// j, err := xbrl.ConvertXMLToUsefulJSON(file)
-	// if err != nil {
-	// 	log.Fatalf("Failed to parse XBRL to JSON: %v", err)
-	// }
-	// log.Printf("JSON: %s", string(j))
+func analyzeCorrectionReport(folderName string, reportNumber string) {
+	fileName := fmt.Sprintf("%s/%s.html", folderName, reportNumber)
+	file, err := os.ReadFile(fileName)
+	if err != nil {
+		log.Fatalf("Failed to read file: %v", err)
+	}
+
+	report, err := xbrl.ParseHTML(file)
+	if err != nil {
+		log.Fatalf("Failed to parse HTML: %v", err)
+	}
+
+	filename2 := fmt.Sprintf("%s-2.json", reportNumber)
+	err = os.WriteFile(filename2, report, 0644)
+	if err != nil {
+		log.Fatalf("Failed to write file: %v", err)
+	}
+
+	log.Printf("Report: %s", string(report))
+
+	fa, err := openai.NewFileAnalyzerFromEnv()
+	if err != nil {
+		log.Fatalf("Failed to create file analyzer: %v", err)
+	}
+
+	answer, err := fa.AnalyzeFile(context.Background(), filename2, "report")
+	if err != nil {
+		log.Fatalf("Failed to analyze file: %v", err)
+	}
+
+	fmt.Printf("Answer Raw: %+v", answer)
+
+	answerJSON, err := json.MarshalIndent(answer, "", "  ")
+	if err != nil {
+		log.Fatalf("Failed to marshal answer: %v", err)
+	}
+	fmt.Printf("Answer: %s", string(answerJSON))
 }
 
 func getInfo(apiKey string) {
