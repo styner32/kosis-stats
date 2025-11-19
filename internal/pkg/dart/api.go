@@ -90,3 +90,8 @@ func New(apiKey string) *DartClient {
 		},
 	}
 }
+
+// only for testing
+func (c *DartClient) UseDefaultClient() {
+	c.client = http.DefaultClient
+}

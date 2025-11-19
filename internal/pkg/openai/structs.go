@@ -46,25 +46,13 @@ type SalesBreakdown struct {
 }
 
 type Consolidated struct {
-	BalanceSheet struct {
-		P20250630 BS `json:"period_2025_06_30"`
-		P20241231 BS `json:"period_2024_12_31"`
-	} `json:"balance_sheet"`
-	IncomeStatement struct {
-		H12025 IS `json:"period_2025_H1"`
-		FY2024 IS `json:"period_2024"`
-	} `json:"income_statement"`
+	BalanceSheet    map[string]BS `json:"balance_sheet"`
+	IncomeStatement map[string]IS `json:"income_statement"`
 }
 
 type Separate struct {
-	BalanceSheet struct {
-		P20250630 BS2 `json:"period_2025_06_30"`
-		P20241231 BS2 `json:"period_2024_12_31"`
-	} `json:"balance_sheet"`
-	IncomeStatement struct {
-		H12025 IS2 `json:"period_2025_H1"`
-		FY2024 IS2 `json:"period_2024"`
-	} `json:"income_statement"`
+	BalanceSheet    map[string]BS2 `json:"balance_sheet"`
+	IncomeStatement map[string]IS2 `json:"income_statement"`
 }
 
 type BS struct {

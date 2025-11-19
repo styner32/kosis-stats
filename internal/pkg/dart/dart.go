@@ -7,7 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"kosis/pkg/xbrl"
+	"kosis/internal/pkg/xbrl"
 	"log"
 	"net/http"
 	"net/url"
@@ -80,6 +80,7 @@ func (c *DartClient) getDisclosureList(apiKey, corpCode, bgnDe, endDe string, pa
 	defer resp.Body.Close()
 
 	var out ListResp
+
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		return nil, err
 	}
@@ -147,14 +148,30 @@ func (c *DartClient) GetDocument(rceptNo string) (string, error) {
 	return outBuf.String(), nil
 }
 
+func (c *DartClient) GetRawReports() ([]List, error) {
+	// 삼성전자(00126380) 2025-01-01 ~ 2025-01-31 공시 100건
+	// LG화학(00356361) 2025-10-01 ~ 2025-10-31 공시 100건
+	// 모든 회사 ""
+	code := "" // 00126380: 삼성전자, 00356361: LG화학, 01515323: LG에너지솔루션
+	today := time.Now()
+	startDate := today.AddDate(0, 0, -90).Format("20060102")
+	endDate := today.AddDate(0, 0, 1).Format("20060102")
+	res, err := c.getDisclosureList(c.key, code, startDate, endDate, 1, 10)
+	if err != nil {
+		return nil, err
+	}
+
+	return res.List, nil
+}
+
 func (c *DartClient) GetList() error {
 	// 삼성전자(00126380) 2025-01-01 ~ 2025-01-31 공시 100건
 	// LG화학(00356361) 2025-10-01 ~ 2025-10-31 공시 100건
 	// 모든 회사 ""
-	code := "01515323" // 00126380: 삼성전자, 00356361: LG화학, 01515323: LG에너지솔루션
+	code := "00126380" // 00126380: 삼성전자, 00356361: LG화학, 01515323: LG에너지솔루션
 	today := time.Now()
-	startDate := today.AddDate(0, 0, -90).Format("20060102")
-	endDate := today.Format("20060102")
+	startDate := today.AddDate(0, 0, -271).Format("20060102")
+	endDate := today.AddDate(0, 0, -181).Format("20060102")
 	res, err := c.getDisclosureList(c.key, code, startDate, endDate, 1, 100)
 	if err != nil {
 		return err
@@ -176,8 +193,6 @@ func (c *DartClient) GetList() error {
 
 // process doc
 func (c *DartClient) processDoc(it List) error {
-	fmt.Printf("%s %s %s %s\n", it.RceptDt, it.RceptNo, it.CorpName, it.ReportNm)
-
 	folder := fmt.Sprintf("data/receipts/%s", it.CorpCode)
 	filename := fmt.Sprintf("%s/%s.html", folder, it.RceptNo)
 
@@ -215,12 +230,24 @@ func (c *DartClient) processDoc(it List) error {
 		}
 	}
 
-	j, err := xbrl.ParseHTML([]byte(doc))
+	fmt.Printf("%s %s %s %s %d\n", it.RceptDt, it.RceptNo, it.CorpName, it.ReportNm, len(doc))
+
+	return StoreFiles([]byte(doc), it.CorpCode)
+}
+
+// store file in compact and markdown folders
+func StoreFiles(rawReport []byte, corpCode string) error {
+	report, err := xbrl.ParseHTML(rawReport)
 	if err != nil {
 		return err
 	}
 
-	compactFolder := fmt.Sprintf("data/compact/%s", it.CorpCode)
+	j, err := json.MarshalIndent(report, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	compactFolder := fmt.Sprintf("data/compact/%s", corpCode)
 
 	if _, err := os.Stat(compactFolder); err != nil {
 		if err := os.MkdirAll(compactFolder, 0755); err != nil {
@@ -228,6 +255,18 @@ func (c *DartClient) processDoc(it List) error {
 		}
 	}
 
-	compactFilename := fmt.Sprintf("%s/%s.json", compactFolder, it.RceptNo)
-	return os.WriteFile(compactFilename, j, 0644)
+	compactFilename := fmt.Sprintf("%s/%s.json", compactFolder, corpCode)
+	if err := os.WriteFile(compactFilename, j, 0644); err != nil {
+		return err
+	}
+
+	markdownFolder := fmt.Sprintf("data/markdowns/%s", corpCode)
+	if _, err := os.Stat(markdownFolder); err != nil {
+		if err := os.MkdirAll(markdownFolder, 0755); err != nil {
+			return err
+		}
+	}
+
+	markdownFilename := fmt.Sprintf("%s/%s.md", markdownFolder, corpCode)
+	return os.WriteFile(markdownFilename, []byte(xbrl.ReportToMarkdown(report)), 0644)
 }

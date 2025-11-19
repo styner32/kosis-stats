@@ -1,12 +1,10 @@
 package xbrl_test
 
 import (
-	"encoding/json"
-
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"kosis/pkg/xbrl"
+	"kosis/internal/pkg/xbrl"
 )
 
 var _ = Describe("ParseHTML", func() {
@@ -80,8 +78,5 @@ func mustParseReport(rawHTML string) xbrl.UsefulReport {
 	b, err := xbrl.ParseHTML([]byte(rawHTML))
 	Expect(err).NotTo(HaveOccurred())
 
-	var report xbrl.UsefulReport
-	Expect(json.Unmarshal(b, &report)).To(Succeed())
-
-	return report
+	return *b
 }

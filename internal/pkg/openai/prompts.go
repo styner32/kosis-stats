@@ -54,15 +54,7 @@ const (
 		},
 		consolidated_financials_million_krw: {
 			balance_sheet: {
-				period_2025_06_30: {
-					total_assets: int64,
-					total_liabilities: int64,
-					total_equity: int64,
-					equity_attributable_to_owners: int64,
-					non_controlling_interests: int64,
-					capital: int64
-				},
-				period_2024_12_31: {
+				"period_YYYY_MM_DD": {
 					total_assets: int64,
 					total_liabilities: int64,
 					total_equity: int64,
@@ -72,13 +64,7 @@ const (
 				}
 			},
 			income_statement: {
-				period_2025_H1: {
-					sales: int64,
-					operating_income: int64,
-					net_income: int64,
-					owners_net_income: int64
-				},
-				period_2024: {
+				"period_YYYY_H1" 또는 "period_YYYY": {
 					sales: int64,
 					operating_income: int64,
 					net_income: int64,
@@ -88,13 +74,7 @@ const (
 		},
 		separate_financials_million_krw: {
 			balance_sheet: {
-				period_2025_06_30: {
-					total_assets: int64,
-					total_liabilities: int64,
-					total_equity: int64,
-					capital: int64
-				},
-				period_2024_12_31: {
+				"period_YYYY_MM_DD": {
 					total_assets: int64,
 					total_liabilities: int64,
 					total_equity: int64,
@@ -102,12 +82,7 @@ const (
 				}
 			},
 			income_statement: {
-				period_2025_H1: {
-					sales: int64,
-					operating_income: int64,
-					net_income: int64
-				},
-				period_2024: {
+				"period_YYYY_H1" 또는 "period_YYYY": {
 					sales: int64,
 					operating_income: int64,
 					net_income: int64
@@ -204,7 +179,10 @@ const (
 	- 퍼센트는 소수점 2자리 이내의 float64로 표시합니다 (예: 85.5).
 	- 문서에 명시되지 않은 필드는 null이 아닌 0 또는 빈 문자열로 표시합니다.
 	- credit_ratings는 배열이며, 정보가 없으면 빈 배열 []로 표시합니다.
-	- 기간별 필드명은 실제 보고서의 기간에 맞춰 조정합니다 (예: period_2025_06_30, period_2024_12_31 등).
+	- consolidated_financials_million_krw와 separate_financials_million_krw의 balance_sheet와 income_statement는 객체(map) 형태이며, 키는 기간을 나타내는 문자열입니다.
+	- balance_sheet의 키 형식: "period_YYYY_MM_DD" (예: "period_2025_06_30", "period_2024_12_31")
+	- income_statement의 키 형식: "period_YYYY_H1" (반기) 또는 "period_YYYY" (연간) (예: "period_2025_H1", "period_2024")
+	- 각 기간별로 문서에 있는 모든 재무제표 데이터를 해당 키로 추출합니다.
 	- 연결재무제표와 별도재무제표를 구분하여 정확히 추출합니다.
 	- 외화노출액과 외화민감도는 각 통화별로 구분하여 추출합니다.`
 

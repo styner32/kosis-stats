@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"strings"
 
@@ -190,6 +191,11 @@ func (a *FileAnalyzer) AnalyzeFile(ctx context.Context, filePath string, docType
 
 	if err := json.Unmarshal([]byte(output), report); err != nil {
 		return nil, fmt.Errorf("unmarshal JSON: %w", err)
+	}
+
+	if docType == "report" {
+		metrics := analyzeTrends(report.(*Report))
+		log.Printf("Trend Metrics: %+v\n", metrics)
 	}
 
 	return report, nil
