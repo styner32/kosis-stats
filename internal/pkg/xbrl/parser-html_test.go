@@ -75,7 +75,7 @@ var _ = Describe("ParseHTML", func() {
 func mustParseReport(rawHTML string) xbrl.UsefulReport {
 	GinkgoHelper()
 
-	b, err := xbrl.ParseHTML([]byte(rawHTML))
+	b, err := xbrl.ParseXBRL([]byte(rawHTML))
 	Expect(err).NotTo(HaveOccurred())
 
 	return *b

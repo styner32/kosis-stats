@@ -28,13 +28,11 @@ func main() {
 	// 	log.Fatalf("Failed to search KOSIS: %v", err)
 	// }
 
-	dartClient := dart.New(dartApiKey)
-	reports, err := dartClient.GetRawReports()
-	if err != nil {
-		log.Fatalf("Failed to get raw reports: %v", err)
-	}
-
-	fmt.Printf("Raw reports: %+v\n", reports)
+	// dartClient := dart.New(dartApiKey)
+	// reports, err := dartClient.GetRawReports()
+	// if err != nil {
+	// 	log.Fatalf("Failed to get raw reports: %v", err)
+	// }
 
 	// data/receipts/01942952/20251015000221.html
 	// 20251015000218.xml
@@ -47,7 +45,7 @@ func main() {
 	// data/receipts/00485177/20251031900992.html // 일진파워, 단일판매ㆍ공급계약체결
 	// data/receipts/01515323/20250814001590.html // LG에너지솔루션, 반기보고서 (2025.06)
 	// data/receipts/00126380/20250515001922.html // 삼성전자, 반기보고서 (2025.03)
-	// analyzeCorrectionReport("data/receipts/00126380/", "20250515001922")
+	analyzeCorrectionReport("data/receipts/00126380/", "20250515001922")
 }
 
 func analyzeCorrectionReport(folderName string, reportNumber string) {

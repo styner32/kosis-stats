@@ -137,6 +137,11 @@ func NewFileAnalyzerFromEnv() (*FileAnalyzer, error) {
 	return &FileAnalyzer{client: &client, model: defaultModel}, nil
 }
 
+func NewFileAnalyzer(apiKey string) *FileAnalyzer {
+	client := openai.NewClient(option.WithAPIKey(apiKey))
+	return &FileAnalyzer{client: &client, model: defaultModel}
+}
+
 // AnalyzeFile sends the file contents to the OpenAI Responses API and returns the
 // assistant's answer for the provided question.
 func (a *FileAnalyzer) AnalyzeFile(ctx context.Context, filePath string, docType string) (interface{}, error) {
@@ -162,8 +167,12 @@ func (a *FileAnalyzer) AnalyzeFile(ctx context.Context, filePath string, docType
 		report = &SupplyExtract{}
 	} else if docType == "report" {
 		mainPrompt += reportSchema
-		prompt = buildPrompt(string(contents), "")
+		prompt = buildPrompt(string(contents), additionalReportSchema)
 		report = &Report{}
+	} else {
+		mainPrompt += defaultSchema
+		prompt = buildPrompt(string(contents), defaultAdditionalSchema)
+		report = &DefaultReport{}
 	}
 
 	resp, err := a.client.Responses.New(ctx, responses.ResponseNewParams{
@@ -197,6 +206,63 @@ func (a *FileAnalyzer) AnalyzeFile(ctx context.Context, filePath string, docType
 		metrics := analyzeTrends(report.(*Report))
 		log.Printf("Trend Metrics: %+v\n", metrics)
 	}
+
+	return report, nil
+}
+
+func (a *FileAnalyzer) AnalyzeReport(ctx context.Context, contents string, docType string) (interface{}, error) {
+	mainPrompt := systemPrompt
+	prompt := ""
+	var report interface{}
+	if docType == "securities_issuance_terms" {
+		mainPrompt += securitiesIssuanceTermsSchema
+		prompt = buildPrompt(string(contents), additionalSecuritiesIssuanceTermsSchema)
+		report = &CorrectionReportJSON{}
+	} else if docType == "supply" { // "SUPPLY"
+		mainPrompt += supplySchema
+		prompt = buildPrompt(string(contents), "")
+		report = &SupplyExtract{}
+	} else if docType == "report" {
+		mainPrompt += reportSchema
+		prompt = buildPrompt(string(contents), additionalReportSchema)
+		report = &Report{}
+	} else {
+		mainPrompt += defaultSchema
+		prompt = buildPrompt(string(contents), defaultAdditionalSchema)
+		report = &DefaultReport{}
+	}
+
+	resp, err := a.client.Responses.New(ctx, responses.ResponseNewParams{
+		Model: a.model,
+		Input: responses.ResponseNewParamsInputUnion{
+			OfInputItemList: responses.ResponseInputParam{
+				responses.ResponseInputItemParamOfMessage(mainPrompt, responses.EasyInputMessageRoleSystem),
+				responses.ResponseInputItemParamOfMessage(prompt, responses.EasyInputMessageRoleUser),
+			},
+		},
+		//		Reasoning: shared.ReasoningParam{
+		//			Effort:  shared.ReasoningEffortHigh,
+		//			Summary: shared.ReasoningSummaryDetailed,
+		//		},
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("call OpenAI: %w", err)
+	}
+
+	output := strings.TrimSpace(resp.OutputText())
+	if output == "" {
+		return nil, errors.New("model returned an empty response")
+	}
+
+	if err := json.Unmarshal([]byte(output), report); err != nil {
+		return nil, fmt.Errorf("unmarshal JSON: %w", err)
+	}
+
+	// if docType == "report" {
+	// 	metrics := analyzeTrends(report.(*Report))
+	// 	log.Printf("Trend Metrics: %+v\n", metrics)
+	// }
 
 	return report, nil
 }

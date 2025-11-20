@@ -237,7 +237,7 @@ func (c *DartClient) processDoc(it List) error {
 
 // store file in compact and markdown folders
 func StoreFiles(rawReport []byte, corpCode string) error {
-	report, err := xbrl.ParseHTML(rawReport)
+	report, err := xbrl.ParseXBRL(rawReport)
 	if err != nil {
 		return err
 	}

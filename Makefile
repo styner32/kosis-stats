@@ -1,4 +1,5 @@
-DATABASE_URL ?= postgresql://sunjinlee@localhost:5432/dart_test?sslmode=disable
+DATABASE_URL ?= postgresql://sunjinlee@localhost:5432/dart?sslmode=disable
+TEST_DATABASE_URL ?= postgresql://sunjinlee@localhost:5432/dart_test?sslmode=disable
 MIGRATIONS_DIR ?= internal/db/migrations
 CMD_DIR ?= cmd
 
@@ -30,3 +31,10 @@ ifndef NAME
 	$(error NAME is not set)
 endif
 	migrate create -ext sql -dir $(MIGRATIONS_DIR) -seq ${NAME}
+
+migrate-test-redo:
+ifndef TEST_DATABASE_URL
+	$(error TEST_DATABASE_URL is not set)
+endif
+	migrate -path=$(MIGRATIONS_DIR) -database "$(TEST_DATABASE_URL)" -verbose down 1
+	migrate -path=$(MIGRATIONS_DIR) -database "$(TEST_DATABASE_URL)" -verbose up

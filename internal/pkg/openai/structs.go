@@ -161,3 +161,10 @@ type CreditRating struct {
 	Subject string `json:"subject"`
 	Rating  string `json:"rating"`
 }
+
+type DefaultReport struct {
+	CompanyName string `json:"company_name"`
+	Date        string `json:"date"`
+	Type        string `json:"type"`
+	Summary     string `json:"summary"`
+}

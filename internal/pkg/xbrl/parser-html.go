@@ -8,7 +8,7 @@ import (
 	"golang.org/x/net/html"
 )
 
-func ParseHTML(raw []byte) (*UsefulReport, error) {
+func ParseXBRL(raw []byte) (*UsefulReport, error) {
 	rawString := string(raw)
 	rawString = strings.ReplaceAll(rawString, "<TU", "<TD")
 	rawString = strings.ReplaceAll(rawString, "</TU>", "</TD>")
