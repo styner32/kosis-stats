@@ -78,40 +78,7 @@ var _ = Describe("HandleFetchReportsTask", func() {
   <P>Secondary paragraph</P>
 </DOCUMENT>`
 
-	BeforeEach(func() {
-		cfg, err := config.LoadConfig()
-		Expect(err).NotTo(HaveOccurred())
-
-		dbConn, err = db.InitDB(cfg.DatabaseURL)
-		Expect(err).NotTo(HaveOccurred())
-
-		testhelpers.CleanupDB(dbConn)
-
-		p = tasks.NewTaskProcessor(dbConn, cfg)
-
-		testhelpers.Activate()
-		p.GetDartClient().UseDefaultClient()
-	})
-
-	AfterEach(func() {
-		testhelpers.Deactivate()
-	})
-
-	It("stores raw reports", func() {
-		testhelpers.New("https://opendart.fss.or.kr").
-			Get("/api/list.json").Reply(200).
-			BodyString(listWithOneReport).
-			Header("Content-Type", "application/json")
-
-		zipDocument, err := testhelpers.CreateMockZipArchive("document.xml", []byte(testDocument))
-		Expect(err).NotTo(HaveOccurred())
-
-		testhelpers.New("https://opendart.fss.or.kr").Get("/api/document.xml").Reply(200).Body(zipDocument).Header("Content-Type", "application/zip").Header("Content-Disposition", `attachment; filename="document.zip"`)
-
-		rawData := `{ \"company_name\": \"LG화학\", \"date\": \"2025-09-30\", \"type\": \"report\", \"summary\": \"LG화학의 2025년 3분기 보고서\" }`
-		testhelpers.New("https://api.openai.com").
-			Post("/v1/responses").Reply(200).
-			BodyString(fmt.Sprintf(`{
+	var openaiResFmt = `{
   "id": "resp_67ccd2bed1ec8190b14f964abc0542670bb6a6b452d3795b",
   "object": "response",
   "created_at": 1741476542,
@@ -166,10 +133,93 @@ var _ = Describe("HandleFetchReportsTask", func() {
   },
   "user": null,
   "metadata": {}
-}`, rawData)).
+}`
+
+	BeforeEach(func() {
+		cfg, err := config.LoadConfig()
+		Expect(err).NotTo(HaveOccurred())
+
+		dbConn, err = db.InitDB(cfg.DatabaseURL)
+		Expect(err).NotTo(HaveOccurred())
+
+		testhelpers.CleanupDB(dbConn)
+
+		p = tasks.NewTaskProcessor(dbConn, cfg)
+
+		testhelpers.Activate()
+		p.GetDartClient().UseDefaultClient()
+	})
+
+	AfterEach(func() {
+		testhelpers.Deactivate()
+	})
+
+	It("stores raw reports", func() {
+		testhelpers.New("https://opendart.fss.or.kr").
+			Get("/api/list.json").Reply(200).
+			BodyString(listWithOneReport).
+			Header("Content-Type", "application/json")
+
+		zipDocument, err := testhelpers.CreateMockZipArchive("document.xml", []byte(testDocument))
+		Expect(err).NotTo(HaveOccurred())
+
+		testhelpers.New("https://opendart.fss.or.kr").Get("/api/document.xml").Reply(200).Body(zipDocument).Header("Content-Type", "application/zip").Header("Content-Disposition", `attachment; filename="document.zip"`)
+
+		rawData := `{ \"company_name\": \"LG화학\", \"date\": \"2025-09-30\", \"type\": \"report\", \"summary\": \"LG화학의 2025년 3분기 보고서\" }`
+		testhelpers.New("https://api.openai.com").
+			Post("/v1/responses").Reply(200).
+			BodyString(fmt.Sprintf(openaiResFmt, rawData)).
 			Header("Content-Type", "application/json")
 
 		ctx := context.Background()
+		err = p.HandleFetchReportsTask(ctx, asynq.NewTask(tasks.TypeTaskFetchReports, []byte("{}")))
+		Expect(err).NotTo(HaveOccurred())
+
+		result, err := gorm.G[models.RawReport](dbConn).Where("corp_code = ?", "00356361").First(ctx)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.ReceiptNumber).To(Equal("20251114001374"))
+		Expect(result.CorpCode).To(Equal("00356361"))
+		Expect(strings.TrimSpace(string(result.BlobData))).To(Equal(strings.TrimSpace(testDocument)))
+		Expect(result.JSONData).To(MatchJSON(`{"company_name": "ACME Corp", "report_title": "Form 10-K", "company_cik": "00001234", "tables": [[["Metric", "Amount"], ["Revenue", "1000"], ["Profit", "500"]], [["Line Item", "Value"], ["Total Assets", "2000"]]], "key_paragraphs": ["Primary discussion.", "Secondary paragraph"]}`))
+
+		analysis, err := gorm.G[models.Analysis](dbConn).Where("raw_report_id = ?", result.ID).First(ctx)
+		Expect(err).NotTo(HaveOccurred())
+		var analysisData map[string]interface{}
+		Expect(json.Unmarshal(analysis.Analysis, &analysisData)).NotTo(HaveOccurred())
+		Expect(analysisData["company_name"]).To(Equal("LG화학"))
+		Expect(analysisData["date"]).To(Equal("2025-09-30"))
+		Expect(analysisData["type"]).To(Equal("report"))
+		Expect(analysisData["summary"]).To(Equal("LG화학의 2025년 3분기 보고서"))
+	})
+
+	It("sets company name if not set", func() {
+		testhelpers.New("https://opendart.fss.or.kr").
+			Get("/api/list.json").Reply(200).
+			BodyString(listWithOneReport).
+			Header("Content-Type", "application/json")
+
+		zipDocument, err := testhelpers.CreateMockZipArchive("document.xml", []byte(testDocument))
+		Expect(err).NotTo(HaveOccurred())
+
+		testhelpers.New("https://opendart.fss.or.kr").Get("/api/document.xml").Reply(200).Body(zipDocument).Header("Content-Type", "application/zip").Header("Content-Disposition", `attachment; filename="document.zip"`)
+
+		company := models.Company{
+			CorpCode: "00356361",
+			CorpName: "LG화학",
+		}
+
+		ctx := context.Background()
+		dbResult := gorm.WithResult()
+		err = gorm.G[models.Company](dbConn, dbResult).Create(ctx, &company)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(dbResult.RowsAffected).To(Equal(int64(1)))
+
+		rawData := `{ \"company_name\": \"\", \"date\": \"2025-09-30\", \"type\": \"report\", \"summary\": \"LG화학의 2025년 3분기 보고서\" }`
+		testhelpers.New("https://api.openai.com").
+			Post("/v1/responses").Reply(200).
+			BodyString(fmt.Sprintf(openaiResFmt, rawData)).
+			Header("Content-Type", "application/json")
+
 		err = p.HandleFetchReportsTask(ctx, asynq.NewTask(tasks.TypeTaskFetchReports, []byte("{}")))
 		Expect(err).NotTo(HaveOccurred())
 

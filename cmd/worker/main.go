@@ -64,6 +64,19 @@ func main() {
 		taskProcessor.HandleFetchReportsTask,
 	)
 
+	mux.HandleFunc(
+		tasks.TypeTaskFetchCompanies,
+		taskProcessor.HandleFetchCompaniesTask,
+	)
+
+	// if _, err := asynqClient.Enqueue(fetchReportsTask); err != nil {
+	// 	log.Fatalf("Failed to enqueue fetch reports task: %v", err)
+	// }
+
+	// if _, err := asynqClient.Enqueue(fetchCompaniesTask); err != nil {
+	// 	log.Fatalf("Failed to enqueue fetch companies task: %v", err)
+	// }
+
 	go func() {
 		log.Println("Starting Asynq scheduler...")
 		if err := scheduler.Run(); err != nil {

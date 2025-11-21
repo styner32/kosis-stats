@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"encoding/json"
+	"encoding/xml"
 	"errors"
 	"fmt"
 	"io"
@@ -40,6 +41,18 @@ type ListResp struct {
 	PageCnt int    `json:"page_count"`
 	Total   int    `json:"total_count"`
 	List    []List `json:"list"`
+}
+
+type Company struct {
+	CorpCode    string `xml:"corp_code"`
+	CorpName    string `xml:"corp_name"`
+	CorpEngName string `xml:"corp_eng_name"`
+	ModifyDate  string `xml:"modify_date"`
+}
+
+type CorpCodeXML struct {
+	XMLName   xml.Name  `xml:"result"`
+	Companies []Company `xml:"list"`
 }
 
 // defined error that document not found
@@ -155,13 +168,72 @@ func (c *DartClient) GetRawReports() ([]List, error) {
 	code := "" // 00126380: 삼성전자, 00356361: LG화학, 01515323: LG에너지솔루션
 	today := time.Now()
 	startDate := today.AddDate(0, 0, -90).Format("20060102")
-	endDate := today.AddDate(0, 0, 1).Format("20060102")
-	res, err := c.getDisclosureList(c.key, code, startDate, endDate, 1, 10)
+	endDate := today.AddDate(0, 0, 0).Format("20060102")
+	res, err := c.getDisclosureList(c.key, code, startDate, endDate, 1, 100)
 	if err != nil {
 		return nil, err
 	}
 
 	return res.List, nil
+}
+
+func (c *DartClient) GetCompanies() ([]Company, error) {
+	fmt.Println("Getting companies")
+	u, _ := url.Parse(baseURL + "/corpCode.xml")
+	q := u.Query()
+	q.Set("crtfc_key", c.key)
+	u.RawQuery = q.Encode()
+	resp, err := c.client.Get(u.String())
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	buf, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("DART error %d: %s", resp.StatusCode, string(buf))
+	}
+
+	zr, err := zip.NewReader(bytes.NewReader(buf), int64(len(buf)))
+	if err != nil {
+		return nil, err
+	}
+
+	outBuf := new(bytes.Buffer)
+	for _, f := range zr.File {
+		rc, err := f.Open()
+		if err != nil {
+			return nil, err
+		}
+
+		_, err = io.Copy(outBuf, rc)
+		defer rc.Close()
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	dec := xml.NewDecoder(bytes.NewReader(outBuf.Bytes()))
+	var file CorpCodeXML
+
+	if err := dec.Decode(&file); err != nil {
+		return nil, err
+	}
+
+	// normalize a bit (optional but practical)
+	for i := range file.Companies {
+		c := &file.Companies[i]
+		c.CorpCode = strings.TrimSpace(c.CorpCode)
+		c.CorpName = strings.TrimSpace(c.CorpName)
+		c.CorpEngName = strings.TrimSpace(c.CorpEngName)
+		c.ModifyDate = strings.TrimSpace(c.ModifyDate)
+	}
+
+	return file.Companies, nil
 }
 
 func (c *DartClient) GetList() error {
