@@ -38,12 +38,24 @@ func main() {
 		log.Fatalf("Failed to create fetch reports task: %v", err)
 	}
 
+	fetchCompaniesTask, err := tasks.NewFetchCompaniesTask()
+	if err != nil {
+		log.Fatalf("Failed to create fetch companies task: %v", err)
+	}
+
 	// every 5 minutes
 	entryID, err := scheduler.Register("*/5 * * * *", fetchReportsTask, asynq.Queue("default"))
 	if err != nil {
 		log.Fatalf("Failed to register periodic task: %v", err)
 	}
 	log.Printf("Registered periodic task: %s (EntryID: %s)", fetchReportsTask.Type(), entryID)
+
+	// every hour at midnight
+	entryID, err = scheduler.Register("0 0 * * *", fetchCompaniesTask, asynq.Queue("default"))
+	if err != nil {
+		log.Fatalf("Failed to register periodic task: %v", err)
+	}
+	log.Printf("Registered periodic task: %s (EntryID: %s)", fetchCompaniesTask.Type(), entryID)
 
 	srv := asynq.NewServer(
 		redisOpt,
@@ -68,14 +80,6 @@ func main() {
 		tasks.TypeTaskFetchCompanies,
 		taskProcessor.HandleFetchCompaniesTask,
 	)
-
-	// if _, err := asynqClient.Enqueue(fetchReportsTask); err != nil {
-	// 	log.Fatalf("Failed to enqueue fetch reports task: %v", err)
-	// }
-
-	// if _, err := asynqClient.Enqueue(fetchCompaniesTask); err != nil {
-	// 	log.Fatalf("Failed to enqueue fetch companies task: %v", err)
-	// }
 
 	go func() {
 		log.Println("Starting Asynq scheduler...")

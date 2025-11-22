@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 )
 
@@ -19,7 +20,8 @@ type Expectation struct {
 	RespBody   []byte
 	Headers    http.Header
 
-	isMatched bool
+	isMatched      bool
+	MismatchReason string
 }
 
 type MockTransport struct {
@@ -58,7 +60,14 @@ func New(baseURL string) *Expectation {
 
 func (e *Expectation) Get(path string) *Expectation {
 	e.Method = http.MethodGet
-	e.URL.Path = path
+
+	u, err := url.Parse(path)
+	if err != nil {
+		panic(fmt.Sprintf("gonock: invalid path provided: %v", err))
+	}
+
+	e.URL.Path = u.Path
+	e.URL.RawQuery = u.RawQuery
 	return e
 }
 
@@ -147,24 +156,69 @@ func (t *MockTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		}
 	}
 
-	return nil, fmt.Errorf("gonock: no match found for request %s %s", req.Method, req.URL)
+	var reasons []string
+	for _, exp := range t.Expectations {
+		if exp.MismatchReason != "" {
+			reasons = append(reasons, exp.MismatchReason)
+		}
+	}
+
+	extra := ""
+	if len(reasons) > 0 {
+		extra = " (" + strings.Join(reasons, "; ") + ")"
+	}
+
+	return nil, fmt.Errorf("gonock: no match found for request %s %s%s", req.Method, req.URL, extra)
 }
 
 func (t *MockTransport) matches(exp *Expectation, req *http.Request) bool {
+	exp.MismatchReason = ""
+
 	if exp.Method != "" && exp.Method != req.Method {
+		exp.MismatchReason = fmt.Sprintf("method mismatch: expected %s got %s", exp.Method, req.Method)
 		return false
 	}
 
 	if exp.URL.Scheme != req.URL.Scheme {
+		exp.MismatchReason = fmt.Sprintf("scheme mismatch: expected %s got %s", exp.URL.Scheme, req.URL.Scheme)
 		return false
 	}
 
 	if exp.URL.Host != req.URL.Host {
+		exp.MismatchReason = fmt.Sprintf("host mismatch: expected %s got %s", exp.URL.Host, req.URL.Host)
 		return false
 	}
 
 	if exp.URL.Path != req.URL.Path {
+		exp.MismatchReason = fmt.Sprintf("path mismatch: expected %s got %s", exp.URL.Path, req.URL.Path)
 		return false
+	}
+
+	expectedQuery := exp.URL.Query()
+	actualQuery := req.URL.Query()
+
+	if len(expectedQuery) == 0 {
+		return true
+	}
+
+	for key, values := range expectedQuery {
+		actualValues, ok := actualQuery[key]
+		if !ok {
+			exp.MismatchReason = fmt.Sprintf("missing query key %s", key)
+			return false
+		}
+
+		if len(actualValues) != len(values) {
+			exp.MismatchReason = fmt.Sprintf("query value count mismatch for %s: expected %v got %v", key, values, actualValues)
+			return false
+		}
+
+		for i, value := range values {
+			if actualValues[i] != value {
+				exp.MismatchReason = fmt.Sprintf("query mismatch for %s: expected %s got %s", key, value, actualValues[i])
+				return false
+			}
+		}
 	}
 
 	return true

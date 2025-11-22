@@ -35,12 +35,13 @@ type List struct {
 }
 
 type ListResp struct {
-	Status  string `json:"status"`
-	Message string `json:"message"`
-	PageNo  int    `json:"page_no"`
-	PageCnt int    `json:"page_count"`
-	Total   int    `json:"total_count"`
-	List    []List `json:"list"`
+	Status    string `json:"status"`
+	Message   string `json:"message"`
+	PageCnt   int    `json:"page_count"`
+	Total     int    `json:"total_count"`
+	PageNo    int    `json:"page_no"`
+	TotalPage int    `json:"total_page"`
+	List      []List `json:"list"`
 }
 
 type Company struct {
@@ -53,6 +54,11 @@ type Company struct {
 type CorpCodeXML struct {
 	XMLName   xml.Name  `xml:"result"`
 	Companies []Company `xml:"list"`
+}
+
+type PageInfo struct {
+	StartDate time.Time
+	EndDate   time.Time
 }
 
 // defined error that document not found
@@ -161,20 +167,46 @@ func (c *DartClient) GetDocument(rceptNo string) (string, error) {
 	return outBuf.String(), nil
 }
 
-func (c *DartClient) GetRawReports() ([]List, error) {
-	// 삼성전자(00126380) 2025-01-01 ~ 2025-01-31 공시 100건
-	// LG화학(00356361) 2025-10-01 ~ 2025-10-31 공시 100건
-	// 모든 회사 ""
-	code := "" // 00126380: 삼성전자, 00356361: LG화학, 01515323: LG에너지솔루션
-	today := time.Now()
-	startDate := today.AddDate(0, 0, -90).Format("20060102")
-	endDate := today.AddDate(0, 0, 0).Format("20060102")
-	res, err := c.getDisclosureList(c.key, code, startDate, endDate, 1, 100)
+func (c *DartClient) GetRecentRawReports(pageInfo ...PageInfo) ([]List, error) {
+	code := ""
+	size := 100
+	page := 1
+
+	var startDate string
+	var endDate string
+
+	if len(pageInfo) > 0 {
+		startDate = pageInfo[0].StartDate.Format("20060102")
+		endDate = pageInfo[0].EndDate.Format("20060102")
+	} else {
+		today := time.Now()
+		startDate = today.AddDate(0, 0, -5).Format("20060102")
+		endDate = today.Format("20060102")
+	}
+
+	log.Printf("Getting recent raw reports. Page: %d, Size: %d, StartDate: %s, EndDate: %s", page, size, startDate, endDate)
+
+	res, err := c.getDisclosureList(c.key, code, startDate, endDate, page, size)
 	if err != nil {
 		return nil, err
 	}
 
+	for page < res.TotalPage {
+		log.Printf("Getting next page of recent raw reports. Page: %d, Size: %d, StartDate: %s, EndDate: %s", page, size, startDate, endDate)
+
+		page++
+		nextPageRes, err := c.getDisclosureList(c.key, code, startDate, endDate, page, size)
+		if err != nil {
+			return nil, err
+		}
+		res.List = append(res.List, nextPageRes.List...)
+	}
+
 	return res.List, nil
+}
+
+func (c *DartClient) GetAllRawReports() ([]List, error) {
+	return nil, fmt.Errorf("GetAllRawReports not implemented")
 }
 
 func (c *DartClient) GetCompanies() ([]Company, error) {

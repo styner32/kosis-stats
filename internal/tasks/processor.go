@@ -45,7 +45,7 @@ func (p *TaskProcessor) HandleFetchReportsTask(ctx context.Context, t *asynq.Tas
 
 	log.Printf("Fetching reports for %+v", payload)
 
-	rawReports, err := p.dartClient.GetRawReports()
+	rawReports, err := p.dartClient.GetRecentRawReports()
 	if err != nil {
 		log.Printf("failed to fetch reports: %v", err)
 		return nil
