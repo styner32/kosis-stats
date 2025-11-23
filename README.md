@@ -9,6 +9,8 @@ This project provides a basic Go application for handling KOSIS statistics data.
 ## Prerequisites
 
 - Go > 1.25
+- Make
+- `migrate` (for database migrations)
 
 ## Installation
 
@@ -25,7 +27,52 @@ This project provides a basic Go application for handling KOSIS statistics data.
    go mod tidy
    ```
 
-3. Run the application:
-   ```bash
-   go run main.go
-   ```
+## Usage
+
+Use `make` to run various components of the application.
+
+### Run the API Server
+
+To start the API server:
+
+```bash
+make run
+```
+
+### Run the Worker
+
+To start the background worker:
+
+```bash
+make run-worker
+```
+
+### Run Tests
+
+To execute the test suite:
+
+```bash
+make test
+```
+
+## Database Migrations
+
+Ensure your `DATABASE_URL` environment variable is set before running migrations.
+
+- Apply all up migrations:
+
+  ```bash
+  make migrate-up
+  ```
+
+- Rollback the last migration:
+
+  ```bash
+  make migrate-down
+  ```
+
+- Create a new migration:
+
+  ```bash
+  make migrate-create NAME=migration_name
+  ```

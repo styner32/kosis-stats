@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KOSIS Stats</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>KOSIS Stats</h1>
+            <p class="subtitle">Financial Reports Dashboard</p>
+        </header>
+
+        <main>
+            <div class="filters">
+                <div class="filter-group">
+                    <label for="company-select">Company:</label>
+                    <select id="company-select" disabled>
+                        <option value="">Loading companies...</option>
+                    </select>
+                </div>
+
+                <div class="filter-group">
+                    <label for="report-select">Report:</label>
+                    <select id="report-select" disabled>
+                        <option value="">Select a company first</option>
+                    </select>
+                </div>
+
+                <div class="filter-group">
+                    <label for="year-select">Year:</label>
+                    <select id="year-select">
+                        <option value="">All Years</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="content">
+                <div id="loading" class="loading hidden">
+                    <div class="spinner"></div>
+                    <p>Loading data...</p>
+                </div>
+
+                <div id="error" class="error hidden"></div>
+
+                <div id="results" class="results hidden">
+                    <h2>Report Details</h2>
+                    <div id="report-details"></div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script type="module" src="dist/app.js"></script>
+</body>
+</html>
+
