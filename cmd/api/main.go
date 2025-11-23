@@ -22,7 +22,9 @@ func main() {
 	}
 
 	var result map[string]interface{}
-	db.Raw("SELECT 1").Scan(&result)
+	if err := db.Raw("SELECT 1").Scan(&result).Error; err != nil {
+		log.Fatalf("Failed to check database connection: %v", err)
+	}
 
 	router := routes.SetupRouter(db, cfg)
 

@@ -66,10 +66,10 @@ var ErrDocumentNotFound = errors.New("document not found")
 
 // 공시 목록 조회
 // https://opendart.fss.or.kr/guide/detail.do?apiGrpCd=DS001&apiId=2019001
-func (c *DartClient) getDisclosureList(apiKey, corpCode, bgnDe, endDe string, pageNo, pageCount int) (*ListResp, error) {
+func (c *DartClient) getDisclosureList(corpCode, bgnDe, endDe string, pageNo, pageCount int) (*ListResp, error) {
 	u, _ := url.Parse(baseURL + "/list.json")
 	q := u.Query()
-	q.Set("crtfc_key", apiKey) // API Key
+	q.Set("crtfc_key", c.key) // API Key
 
 	if corpCode != "" {
 		q.Set("corp_code", corpCode) // 8자리 기업코드(예: 삼성전자 00126380)
@@ -158,10 +158,10 @@ func (c *DartClient) GetDocument(rceptNo string) (string, error) {
 		}
 
 		_, err = io.Copy(outBuf, rc)
-		defer rc.Close()
 		if err != nil {
 			return "", err
 		}
+		rc.Close()
 	}
 
 	return outBuf.String(), nil
@@ -186,7 +186,7 @@ func (c *DartClient) GetRecentRawReports(pageInfo ...PageInfo) ([]List, error) {
 
 	log.Printf("Getting recent raw reports. Page: %d, Size: %d, StartDate: %s, EndDate: %s", page, size, startDate, endDate)
 
-	res, err := c.getDisclosureList(c.key, code, startDate, endDate, page, size)
+	res, err := c.getDisclosureList(code, startDate, endDate, page, size)
 	if err != nil {
 		return nil, err
 	}
@@ -195,7 +195,7 @@ func (c *DartClient) GetRecentRawReports(pageInfo ...PageInfo) ([]List, error) {
 		log.Printf("Getting next page of recent raw reports. Page: %d, Size: %d, StartDate: %s, EndDate: %s", page, size, startDate, endDate)
 
 		page++
-		nextPageRes, err := c.getDisclosureList(c.key, code, startDate, endDate, page, size)
+		nextPageRes, err := c.getDisclosureList(code, startDate, endDate, page, size)
 		if err != nil {
 			return nil, err
 		}
@@ -243,7 +243,8 @@ func (c *DartClient) GetCompanies() ([]Company, error) {
 		}
 
 		_, err = io.Copy(outBuf, rc)
-		defer rc.Close()
+		rc.Close()
+
 		if err != nil {
 			return nil, err
 		}
@@ -276,7 +277,7 @@ func (c *DartClient) GetList() error {
 	today := time.Now()
 	startDate := today.AddDate(0, 0, -271).Format("20060102")
 	endDate := today.AddDate(0, 0, -181).Format("20060102")
-	res, err := c.getDisclosureList(c.key, code, startDate, endDate, 1, 100)
+	res, err := c.getDisclosureList(code, startDate, endDate, 1, 100)
 	if err != nil {
 		return err
 	}
@@ -326,8 +327,8 @@ func (c *DartClient) processDoc(it List) error {
 		if err != nil {
 			return err
 		}
-
 		defer f.Close()
+
 		_, err = f.WriteString(doc)
 		if err != nil {
 			return err

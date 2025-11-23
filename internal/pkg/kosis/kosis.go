@@ -103,17 +103,17 @@ func (c *Client) get(path string, q url.Values, v any) error {
 	if err != nil {
 		return err
 	}
-
 	defer resp.Body.Close()
+
 	if resp.StatusCode >= 400 {
 		b, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("kosis http %d: %s", resp.StatusCode, string(b))
 	}
-	//dec := json.NewDecoder(resp.Body)
-	//return dec.Decode(v)
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
 
-	log.Printf("body: %s", string(body))
 	return json.Unmarshal(body, v)
 }
 
