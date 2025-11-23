@@ -100,7 +100,7 @@ func (p *TaskProcessor) HandleFetchReportsTask(ctx context.Context, t *asynq.Tas
 		}
 
 		reportType := ""
-		if strings.Contains(doc.ReportTitle, "분기보고서") {
+		if strings.Contains(doc.ReportTitle, "분기보고서") || strings.Contains(doc.ReportTitle, "사업보고서") || strings.Contains(doc.ReportTitle, "반기보고서") {
 			reportType = "report"
 		} else {
 			log.Printf("unknown report type: %s", doc.ReportTitle)

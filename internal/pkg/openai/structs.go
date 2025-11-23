@@ -163,8 +163,10 @@ type CreditRating struct {
 }
 
 type DefaultReport struct {
-	CompanyName string `json:"company_name"`
-	Date        string `json:"date"`
-	Type        string `json:"type"`
-	Summary     string `json:"summary"`
+	CompanyName      string   `json:"company_name"`
+	Date             string   `json:"date"`
+	Type             string   `json:"type"`
+	Summary          string   `json:"summary"`
+	RelatedCompanies []string `json:"related_companies"`
+	SchemaSuggestion string   `json:"schema_suggestion"`
 }

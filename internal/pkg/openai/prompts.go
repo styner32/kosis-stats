@@ -208,6 +208,8 @@ const (
 		date: string (YYYY-MM-DD),
 		type: string,
 		summary: string,
+		related_companies: []string,
+		schema_suggestion: string,
 	}`
 	defaultAdditionalSchema = `
 	- 회사명, 날짜, 유형, 요약은 문서 상단에서 확인합니다.
@@ -215,6 +217,7 @@ const (
 	- 유형은 문서 유형을 추출합니다.
 	- 날짜는 문서 날짜를 추출합니다.
 	- 회사명은 문서 회사명을 추출합니다.
-	- 해당 문서에 맞는 JSON 스키마를 추출합니다.
+	- 관련 회사는 문서 내용에서 관련 회사를 추출합니다.
+	- 해당 문서에 맞는 JSON 스키마를 제안합니다.
 	`
 )

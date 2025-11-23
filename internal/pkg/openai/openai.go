@@ -110,7 +110,7 @@ type IssuanceTermsExtract struct {
 }
 
 const (
-	defaultModel     = shared.ResponsesModel(shared.ChatModelGPT5)
+	defaultModel     = shared.ResponsesModel("gpt-5.1")
 	previewByteLimit = 128 * 1024 // cap what we send to the model
 )
 

@@ -11,8 +11,11 @@ run: ## Run the app: go run
 run-worker: ## Run the worker: go run
 	go run $(CMD_DIR)/worker/main.go
 
+run-web: ## Run the web server: npm run serve
+	cd web && npm run serve
+
 test: ## Run the tests
-	go test -v ./...
+	go test ./...
 
 migrate-up: ## Run all up migrations
 ifndef DATABASE_URL

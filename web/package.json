@@ -1,0 +1,23 @@
+{
+  "name": "kosis-stats-frontend",
+  "version": "1.0.0",
+  "description": "KOSIS Stats Frontend - TypeScript SPA",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch",
+    "serve": "python3 -m http.server 3000 || python -m SimpleHTTPServer 3000 || php -S localhost:3000",
+    "dev": "npm run watch & npm run serve"
+  },
+  "keywords": [
+    "kosis",
+    "stats",
+    "frontend",
+    "spa"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.3.3"
+  }
+}
+

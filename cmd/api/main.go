@@ -24,8 +24,6 @@ func main() {
 	var result map[string]interface{}
 	db.Raw("SELECT 1").Scan(&result)
 
-	fmt.Printf("result: %+v\n", result)
-
 	router := routes.SetupRouter(db, cfg)
 
 	serverAddr := fmt.Sprintf(":%s", "8080")
