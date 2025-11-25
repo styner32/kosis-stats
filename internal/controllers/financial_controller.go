@@ -19,7 +19,7 @@ func (fc *FinancialController) GetCompanies(c *gin.Context) {
 	ctx := c.Request.Context()
 	limit := getLimitWithDefault(c, 100)
 
-	companies, err := gorm.G[models.Company](fc.DB).Order("corp_name ASC").Limit(limit).Find(ctx)
+	companies, err := gorm.G[models.Company](fc.DB).Where("category <> ?", "E").Order("last_modified_date DESC").Limit(limit).Find(ctx)
 	if err != nil {
 		log.Printf("failed to get companies: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Something went wrong"})
@@ -61,6 +61,29 @@ func (fc *FinancialController) GetReports(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"reports": analyses,
+	})
+}
+
+// GetRawReport returns a raw report for the given corp code and report number
+func (fc *FinancialController) GetRawReport(c *gin.Context) {
+	corpCode := c.Param("corp_code")
+	rawReportID := c.Param("raw_report_id")
+
+	var rawReport models.RawReport
+	err := fc.DB.Model(&models.RawReport{}).Where("corp_code = ? AND id = ?", corpCode, rawReportID).First(&rawReport).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Raw report not found"})
+			return
+		}
+
+		log.Printf("failed to get raw report: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Something went wrong"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"raw_report": string(rawReport.BlobData),
 	})
 }
 

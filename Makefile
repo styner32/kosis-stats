@@ -12,6 +12,9 @@ run-worker: ## Run the worker: go run
 	go run $(CMD_DIR)/worker/main.go
 
 run-web: ## Run the web server: npm run serve
+	cd web && npm run dev
+
+run-web-serve: ## Run the web server: npm run serve
 	cd web && npm run serve
 
 test: ## Run the tests

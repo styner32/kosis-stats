@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"time"
 
 	"kosis/internal/config"
@@ -178,6 +179,33 @@ var _ = Describe("FinancialController", func() {
 
 			Expect(resp.Code).To(Equal(http.StatusNotFound))
 			Expect(resp.Body.String()).To(MatchJSON(`{"error": "Company not found"}`))
+		})
+	})
+
+	Describe("GET /api/v1/reports/:corp_code/:raw_report_id", func() {
+		It("returns raw report for the given corp code and raw report id", func() {
+			rawReportA := models.RawReport{
+				ReceiptNumber: "20251123000001",
+				CorpCode:      "10000001",
+				BlobData:      []byte("doc1"),
+				BlobSize:      4,
+				JSONData:      json.RawMessage(`{"a":1}`),
+			}
+
+			ctx := context.Background()
+			createRawReport(dbConn, ctx, &rawReportA)
+
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/reports/10000001/"+strconv.FormatUint(uint64(rawReportA.ID), 10), nil)
+			resp := httptest.NewRecorder()
+
+			router.ServeHTTP(resp, req)
+			Expect(resp.Code).To(Equal(http.StatusOK))
+
+			var body struct {
+				RawReport string `json:"raw_report"`
+			}
+			Expect(json.Unmarshal(resp.Body.Bytes(), &body)).To(Succeed())
+			Expect(body.RawReport).To(Equal("doc1"))
 		})
 	})
 })

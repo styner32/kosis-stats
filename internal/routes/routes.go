@@ -43,6 +43,9 @@ func SetupRouter(db *gorm.DB, cfg *config.Config) *gin.Engine {
 
 		// Reports endpoints
 		api.GET("/reports/:corp_code", financialController.GetReports)
+
+		// Raw reports endpoints
+		api.GET("/reports/:corp_code/:raw_report_id", financialController.GetRawReport)
 	}
 
 	return router
