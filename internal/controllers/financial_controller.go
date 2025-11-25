@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"encoding/base64"
 	"kosis/internal/models"
 	"log"
 	"net/http"
@@ -19,7 +20,16 @@ func (fc *FinancialController) GetCompanies(c *gin.Context) {
 	ctx := c.Request.Context()
 	limit := getLimitWithDefault(c, 100)
 
-	companies, err := gorm.G[models.Company](fc.DB).Where("category <> ?", "E").Order("last_modified_date DESC").Limit(limit).Find(ctx)
+	corpCodes := []string{}
+	err := fc.DB.Model(&models.RawReport{}).Distinct("corp_code").Pluck("corp_code", &corpCodes).Error
+	if err != nil {
+		log.Printf("failed to get raw reports: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Something went wrong"})
+		return
+	}
+
+	// show companies that has at least one raw report
+	companies, err := gorm.G[models.Company](fc.DB).Where("category <> ?", "E").Where("corp_code IN (?)", corpCodes).Order("last_modified_date DESC").Limit(limit).Find(ctx)
 	if err != nil {
 		log.Printf("failed to get companies: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Something went wrong"})
@@ -83,7 +93,7 @@ func (fc *FinancialController) GetRawReport(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"raw_report": string(rawReport.BlobData),
+		"raw_report": base64.StdEncoding.EncodeToString(rawReport.BlobData),
 	})
 }
 

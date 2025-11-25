@@ -2,6 +2,7 @@ package controllers_test
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -88,6 +89,24 @@ var _ = Describe("FinancialController", func() {
 				LastModifiedDate: time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC),
 			}
 			createCompany(dbConn, ctx, &company2)
+
+			rawReportA := models.RawReport{
+				ReceiptNumber: "20251123000001",
+				CorpCode:      "10000001",
+				BlobData:      []byte("doc1"),
+				BlobSize:      4,
+				JSONData:      json.RawMessage(`{"a":1}`),
+			}
+			createRawReport(dbConn, ctx, &rawReportA)
+
+			rawReportB := models.RawReport{
+				ReceiptNumber: "20251123000002",
+				CorpCode:      "10000002",
+				BlobData:      []byte("doc2"),
+				BlobSize:      4,
+				JSONData:      json.RawMessage(`{"b":2}`),
+			}
+			createRawReport(dbConn, ctx, &rawReportB)
 		})
 
 		It("returns companies", func() {
@@ -205,7 +224,7 @@ var _ = Describe("FinancialController", func() {
 				RawReport string `json:"raw_report"`
 			}
 			Expect(json.Unmarshal(resp.Body.Bytes(), &body)).To(Succeed())
-			Expect(body.RawReport).To(Equal("doc1"))
+			Expect(body.RawReport).To(Equal(base64.StdEncoding.EncodeToString([]byte("doc1"))))
 		})
 	})
 })

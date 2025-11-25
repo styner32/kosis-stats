@@ -376,7 +376,56 @@ function displayReportDetails(
     html += "<h4>Raw Report Content</h4>";
 
     try {
-      const reportContent = rawReport.BlobData.toString();
+      // Backend now returns Base64 string to preserve original bytes
+      const binaryString = atob(rawReport.BlobData.toString());
+      const len = binaryString.length;
+      const bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+
+      // Decode bytes to string, handling EUC-KR if necessary
+      // We try to detect if it's likely EUC-KR (common for DART)
+      let reportContent = "";
+      const decoder = new TextDecoder("utf-8", { fatal: false }); 
+      const tempContent = decoder.decode(bytes);
+
+      // Check if UTF-8 decoding resulted in many replacement characters ()
+      // If the file is actually EUC-KR but we decode as UTF-8, we'll get many of these.
+      // If the file is UTF-8 (even with a lying meta tag), we'll get few/none.
+      const replacementCount = (tempContent.match(/\uFFFD/g) || []).length;
+      
+      // Heuristic: If > 1% of characters are replacements, it's probably not UTF-8
+      const isLikelyBrokenUtf8 = replacementCount > (tempContent.length * 0.01);
+
+      // Check for EUC-KR meta tag
+      const hasEucKrTag = tempContent.includes('charset=euc-kr') || 
+                         tempContent.includes('charset="euc-kr"') || 
+                         tempContent.includes("charset='euc-kr'");
+
+      if (hasEucKrTag && isLikelyBrokenUtf8) {
+        try {
+            console.log("Detected EUC-KR tag and broken UTF-8. Re-decoding as EUC-KR.");
+            const eucDecoder = new TextDecoder("euc-kr");
+            reportContent = eucDecoder.decode(bytes);
+        } catch (e) {
+            console.warn("Failed to decode as EUC-KR, falling back to UTF-8", e);
+            reportContent = tempContent;
+        }
+      } else {
+        // It's either valid UTF-8 (regardless of tag) or we don't know what it is.
+        // If it was valid UTF-8 but had the EUC-KR tag (the lying tag case), 
+        // we stick with tempContent (which is correct) and just fix the tag below.
+        if (hasEucKrTag) {
+             console.log("Detected EUC-KR tag but content appears to be valid UTF-8. Ignoring tag.");
+        }
+        reportContent = tempContent;
+      }
+
+      // Always fix the meta tag to utf-8 if we have rendered it as such (which we have, effectively)
+      // Matches: charset=euc-kr, charset="euc-kr", charset='euc-kr'
+      reportContent = reportContent.replace(/(charset\s*=\s*["']?)euc-kr(["']?)/gi, '$1utf-8$2');
+
       const lowerContent = reportContent.toLowerCase();
 
       // Improved content detection
@@ -393,7 +442,8 @@ function displayReportDetails(
 
       if (hasHtmlTags) {
         // Render as HTML in iframe
-        const blob = new Blob([reportContent], { type: "text/html" });
+        // Use UTF-8 as we have normalized the string
+        const blob = new Blob([reportContent], { type: "text/html; charset=utf-8" });
         currentObjectUrl = URL.createObjectURL(blob);
 
         html += `<iframe 
@@ -404,10 +454,8 @@ function displayReportDetails(
         html +=
           '<p class="note" style="font-size: 0.8em; color: #666; margin-top: 5px;">Rendering as HTML.</p>';
       } else if (looksLikeXml) {
-        // Render as XML (Browser default tree view is often better than raw code for data files)
-        // OR keep Prism if specifically requested, but user asked for "not raw code".
-        // Let's try the browser's native XML viewer via iframe first as it's interactive.
-        const blob = new Blob([reportContent], { type: "text/xml" });
+        // Render as XML
+        const blob = new Blob([reportContent], { type: "text/xml; charset=utf-8" });
         currentObjectUrl = URL.createObjectURL(blob);
 
         html += `<iframe 
