@@ -15,10 +15,21 @@ type FinancialController struct {
 	DB *gorm.DB
 }
 
+type CompanyResponse struct {
+	ID               uint   `json:"id"`
+	CorpCode         string `json:"corp_code"`
+	CorpName         string `json:"corp_name"`
+	CorpEngName      string `json:"corp_name_eng"`
+	LastModifiedDate string `json:"last_modified_date"`
+	CreatedAt        string `json:"created_at"`
+	UpdatedAt        string `json:"updated_at"`
+}
+
 // GetCompanies returns a list of all companies
 func (fc *FinancialController) GetCompanies(c *gin.Context) {
 	ctx := c.Request.Context()
 	limit := getLimitWithDefault(c, 100)
+	search := c.Query("search")
 
 	corpCodes := []string{}
 	err := fc.DB.Model(&models.RawReport{}).Distinct("corp_code").Pluck("corp_code", &corpCodes).Error
@@ -29,15 +40,36 @@ func (fc *FinancialController) GetCompanies(c *gin.Context) {
 	}
 
 	// show companies that has at least one raw report
-	companies, err := gorm.G[models.Company](fc.DB).Where("category <> ?", "E").Where("corp_code IN (?)", corpCodes).Order("last_modified_date DESC").Limit(limit).Find(ctx)
+	query := gorm.G[models.Company](fc.DB).Where("category <> ?", "E").Where("corp_code IN (?)", corpCodes)
+
+	if search != "" {
+		// Use ILIKE for case-insensitive search, supported by pg_trgm indexes
+		searchTerm := "%" + search + "%"
+		query = query.Where("corp_name ILIKE ? OR corp_eng_name ILIKE ?", searchTerm, searchTerm)
+	}
+
+	companies, err := query.Order("last_modified_date DESC").Limit(limit).Find(ctx)
 	if err != nil {
 		log.Printf("failed to get companies: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Something went wrong"})
 		return
 	}
 
+	companyResponses := []CompanyResponse{}
+	for _, company := range companies {
+		companyResponses = append(companyResponses, CompanyResponse{
+			ID:               company.ID,
+			CorpCode:         company.CorpCode,
+			CorpName:         company.CorpName,
+			CorpEngName:      company.CorpEngName,
+			LastModifiedDate: company.LastModifiedDate.Format("2006-01-02 15:04:05"),
+			CreatedAt:        company.CreatedAt.Format("2006-01-02 15:04:05"),
+			UpdatedAt:        company.UpdatedAt.Format("2006-01-02 15:04:05"),
+		})
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"companies": companies,
+		"companies": companyResponses,
 	})
 }
 

@@ -35,7 +35,12 @@ const state: AppState = {
 
 // DOM elements
 const elements: DOMElements = {
-  companySelect: document.getElementById("company-select") as HTMLSelectElement,
+  companyInput: document.getElementById(
+    "company-combobox-input"
+  ) as HTMLInputElement,
+  companyList: document.getElementById(
+    "company-combobox-list"
+  ) as HTMLUListElement,
   reportSelect: document.getElementById("report-select") as HTMLSelectElement,
   yearSelect: document.getElementById("year-select") as HTMLSelectElement,
   loading: document.getElementById("loading")!,
@@ -43,6 +48,18 @@ const elements: DOMElements = {
   results: document.getElementById("results")!,
   reportDetails: document.getElementById("report-details")!,
 };
+
+// Debounce utility
+function debounce<T extends (...args: any[]) => void>(
+  func: T,
+  wait: number
+): (...args: Parameters<T>) => void {
+  let timeout: ReturnType<typeof setTimeout>;
+  return (...args: Parameters<T>) => {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => func(...args), wait);
+  };
+}
 
 // Helper function to get field value with fallbacks
 function getFieldValue<T>(
@@ -87,18 +104,21 @@ async function apiRequest<T>(
   }
 }
 
-async function fetchCompanies(): Promise<void> {
+async function fetchCompanies(search: string = ""): Promise<void> {
   try {
-    showLoading();
-    const data = await apiRequest<CompaniesResponse | Company[]>("/companies");
+    // Don't show global loading for search interactions to keep UI responsive
+    // showLoading();
+    const endpoint = search
+      ? `/companies?search=${encodeURIComponent(search)}`
+      : "/companies";
+    const data = await apiRequest<CompaniesResponse | Company[]>(endpoint);
     state.companies = Array.isArray(data) ? data : data.companies || [];
-    populateCompanySelect();
-    hideLoading();
+    renderCompanyList();
+    // hideLoading();
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown error";
-    showError(`Failed to load companies: ${message}`);
+    console.error("Failed to load companies:", error);
     state.companies = [];
-    populateCompanySelect();
+    renderCompanyList();
   }
 }
 
@@ -152,21 +172,20 @@ async function fetchRawReport(
 }
 
 // UI update functions
-function populateCompanySelect(): void {
-  elements.companySelect.innerHTML =
-    '<option value="">Select a company</option>';
+function renderCompanyList(): void {
+  elements.companyList.innerHTML = "";
 
   if (state.companies.length === 0) {
-    elements.companySelect.innerHTML =
-      '<option value="">No companies available</option>';
-    elements.companySelect.disabled = true;
+    elements.companyList.innerHTML =
+      '<li class="combobox-empty">No companies found</li>';
+    elements.companyList.classList.remove("hidden");
     return;
   }
 
-  elements.companySelect.disabled = false;
-
   state.companies.forEach((company) => {
-    const option = document.createElement("option");
+    const li = document.createElement("li");
+    li.className = "combobox-item";
+
     const corpCode =
       getFieldValue<string>(
         company as Record<string, unknown>,
@@ -184,10 +203,34 @@ function populateCompanySelect(): void {
         "name"
       ) || `Company ${corpCode}`;
 
-    option.value = corpCode;
-    option.textContent = corpName;
-    elements.companySelect.appendChild(option);
+    li.textContent = corpName;
+    li.dataset.value = corpCode;
+
+    if (state.selectedCompany === corpCode) {
+      li.classList.add("selected");
+    }
+
+    li.addEventListener("click", () => {
+      selectCompany(corpCode, corpName);
+    });
+
+    elements.companyList.appendChild(li);
   });
+
+  elements.companyList.classList.remove("hidden");
+}
+
+function selectCompany(corpCode: string, corpName: string): void {
+  state.selectedCompany = corpCode;
+  elements.companyInput.value = corpName;
+  elements.companyList.classList.add("hidden");
+
+  // Clear reports
+  state.selectedReport = null;
+  elements.reportSelect.value = "";
+  clearReportDetails();
+
+  fetchReports(corpCode);
 }
 
 function populateReportSelect(): void {
@@ -387,63 +430,178 @@ function displayReportDetails(
       // Decode bytes to string, handling EUC-KR if necessary
       // We try to detect if it's likely EUC-KR (common for DART)
       let reportContent = "";
-      const decoder = new TextDecoder("utf-8", { fatal: false }); 
+      const decoder = new TextDecoder("utf-8", { fatal: false });
       const tempContent = decoder.decode(bytes);
 
       // Check if UTF-8 decoding resulted in many replacement characters ()
       // If the file is actually EUC-KR but we decode as UTF-8, we'll get many of these.
       // If the file is UTF-8 (even with a lying meta tag), we'll get few/none.
       const replacementCount = (tempContent.match(/\uFFFD/g) || []).length;
-      
+
       // Heuristic: If > 1% of characters are replacements, it's probably not UTF-8
-      const isLikelyBrokenUtf8 = replacementCount > (tempContent.length * 0.01);
+      const isLikelyBrokenUtf8 = replacementCount > tempContent.length * 0.01;
 
       // Check for EUC-KR meta tag
-      const hasEucKrTag = tempContent.includes('charset=euc-kr') || 
-                         tempContent.includes('charset="euc-kr"') || 
-                         tempContent.includes("charset='euc-kr'");
+      const hasEucKrTag =
+        tempContent.includes("charset=euc-kr") ||
+        tempContent.includes('charset="euc-kr"') ||
+        tempContent.includes("charset='euc-kr'");
 
       if (hasEucKrTag && isLikelyBrokenUtf8) {
         try {
-            console.log("Detected EUC-KR tag and broken UTF-8. Re-decoding as EUC-KR.");
-            const eucDecoder = new TextDecoder("euc-kr");
-            reportContent = eucDecoder.decode(bytes);
+          console.log(
+            "Detected EUC-KR tag and broken UTF-8. Re-decoding as EUC-KR."
+          );
+          const eucDecoder = new TextDecoder("euc-kr");
+          reportContent = eucDecoder.decode(bytes);
         } catch (e) {
-            console.warn("Failed to decode as EUC-KR, falling back to UTF-8", e);
-            reportContent = tempContent;
+          console.warn("Failed to decode as EUC-KR, falling back to UTF-8", e);
+          reportContent = tempContent;
         }
       } else {
         // It's either valid UTF-8 (regardless of tag) or we don't know what it is.
-        // If it was valid UTF-8 but had the EUC-KR tag (the lying tag case), 
+        // If it was valid UTF-8 but had the EUC-KR tag (the lying tag case),
         // we stick with tempContent (which is correct) and just fix the tag below.
         if (hasEucKrTag) {
-             console.log("Detected EUC-KR tag but content appears to be valid UTF-8. Ignoring tag.");
+          console.log(
+            "Detected EUC-KR tag but content appears to be valid UTF-8. Ignoring tag."
+          );
         }
         reportContent = tempContent;
       }
 
       // Always fix the meta tag to utf-8 if we have rendered it as such (which we have, effectively)
       // Matches: charset=euc-kr, charset="euc-kr", charset='euc-kr'
-      reportContent = reportContent.replace(/(charset\s*=\s*["']?)euc-kr(["']?)/gi, '$1utf-8$2');
+      reportContent = reportContent.replace(
+        /(charset\s*=\s*["']?)euc-kr(["']?)/gi,
+        "$1utf-8$2"
+      );
 
       const lowerContent = reportContent.toLowerCase();
 
       // Improved content detection
       // If it contains common HTML structural tags, treat it as HTML regardless of XML headers
-      const hasHtmlTags = lowerContent.includes("<table") || 
-                         lowerContent.includes("<body") || 
-                         lowerContent.includes("<div") ||
-                         lowerContent.includes("<span");
-      
+      const hasHtmlTags =
+        lowerContent.includes("<table") ||
+        lowerContent.includes("<body") ||
+        lowerContent.includes("<div") ||
+        lowerContent.includes("<span");
+
       const firstChars = reportContent.substring(0, 100).trim().toLowerCase();
-      const looksLikeXml = firstChars.startsWith("<?xml") ||
-                          firstChars.includes("<xbrl") ||
-                          firstChars.includes("<dart-receipt");
+      const looksLikeXml =
+        firstChars.startsWith("<?xml") ||
+        firstChars.includes("<xbrl") ||
+        firstChars.includes("<dart-receipt");
 
       if (hasHtmlTags) {
+        // Inject Search/Filter UI and Logic
+        const searchScript = `
+          <style>
+            #report-search-bar {
+              position: fixed;
+              top: 0;
+              left: 0;
+              right: 0;
+              background: #f8f9fa;
+              padding: 10px;
+              border-bottom: 1px solid #ddd;
+              box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+              z-index: 10000;
+              display: flex;
+              gap: 10px;
+              align-items: center;
+              font-family: system-ui, -apple-system, sans-serif;
+            }
+            #report-search-input {
+              padding: 6px 12px;
+              border: 1px solid #ccc;
+              border-radius: 4px;
+              flex-grow: 1;
+              font-size: 14px;
+            }
+            #report-search-stats {
+              font-size: 12px;
+              color: #666;
+            }
+            body {
+              padding-top: 60px !important; /* Make space for search bar */
+            }
+            .highlight {
+              background-color: #fff3cd;
+              padding: 2px;
+            }
+            .match-row {
+              background-color: #e8f0fe;
+            }
+          </style>
+          <div id="report-search-bar">
+            <input type="text" id="report-search-input" placeholder="Search text to filter rows... (e.g., 'Sales', 'Revenue')">
+            <span id="report-search-stats"></span>
+          </div>
+          <script>
+            document.addEventListener('DOMContentLoaded', () => {
+              const input = document.getElementById('report-search-input');
+              const stats = document.getElementById('report-search-stats');
+              const tables = document.querySelectorAll('table');
+              let timeout = null;
+
+              input.addEventListener('input', (e) => {
+                clearTimeout(timeout);
+                timeout = setTimeout(() => {
+                  const term = e.target.value.toLowerCase();
+                  let matchCount = 0;
+                  let totalRows = 0;
+
+                  tables.forEach(table => {
+                    const rows = table.querySelectorAll('tr');
+                    
+                    rows.forEach(row => {
+                      // Skip header rows if possible (heuristic)
+                      if(row.querySelector('th')) return;
+                      
+                      totalRows++;
+                      const text = row.textContent.toLowerCase();
+                      
+                      if (term === '') {
+                        row.style.display = '';
+                        row.classList.remove('match-row');
+                      } else if (text.includes(term)) {
+                        row.style.display = '';
+                        row.classList.add('match-row');
+                        matchCount++;
+                      } else {
+                        row.style.display = 'none';
+                        row.classList.remove('match-row');
+                      }
+                    });
+                  });
+
+                  if (term !== '') {
+                    stats.textContent = \`Found \${matchCount} matches\`;
+                  } else {
+                    stats.textContent = '';
+                  }
+                }, 300);
+              });
+            });
+          </script>
+        `;
+
+        // Insert before </body>, or append if not found
+        if (reportContent.includes("</body>")) {
+          reportContent = reportContent.replace(
+            "</body>",
+            searchScript + "</body>"
+          );
+        } else {
+          reportContent += searchScript;
+        }
+
         // Render as HTML in iframe
         // Use UTF-8 as we have normalized the string
-        const blob = new Blob([reportContent], { type: "text/html; charset=utf-8" });
+        const blob = new Blob([reportContent], {
+          type: "text/html; charset=utf-8",
+        });
         currentObjectUrl = URL.createObjectURL(blob);
 
         html += `<iframe 
@@ -455,7 +613,9 @@ function displayReportDetails(
           '<p class="note" style="font-size: 0.8em; color: #666; margin-top: 5px;">Rendering as HTML.</p>';
       } else if (looksLikeXml) {
         // Render as XML
-        const blob = new Blob([reportContent], { type: "text/xml; charset=utf-8" });
+        const blob = new Blob([reportContent], {
+          type: "text/xml; charset=utf-8",
+        });
         currentObjectUrl = URL.createObjectURL(blob);
 
         html += `<iframe 
@@ -467,7 +627,9 @@ function displayReportDetails(
           '<p class="note" style="font-size: 0.8em; color: #666; margin-top: 5px;">Rendering as XML.</p>';
       } else {
         // Fallback to text/plain
-        html += `<pre style="white-space: pre-wrap; max-height: 600px; overflow: auto;">${escapeHtml(reportContent)}</pre>`;
+        html += `<pre style="white-space: pre-wrap; max-height: 600px; overflow: auto;">${escapeHtml(
+          reportContent
+        )}</pre>`;
       }
     } catch (e) {
       console.error("Failed to render report:", e);
@@ -535,20 +697,36 @@ function escapeHtml(text: string): string {
 }
 
 // Event handlers
-elements.companySelect.addEventListener("change", async (e: Event) => {
-  const target = e.target as HTMLSelectElement;
-  state.selectedCompany = target.value || null;
-  state.selectedReport = null;
-  elements.reportSelect.value = "";
-  clearReportDetails();
+if (elements.companyInput) {
+  // Input handler for search
+  elements.companyInput.addEventListener(
+    "input",
+    debounce((e: Event) => {
+      const target = e.target as HTMLInputElement;
+      fetchCompanies(target.value);
+    }, 300)
+  );
 
-  if (state.selectedCompany) {
-    await fetchReports(state.selectedCompany);
-  } else {
-    state.reports = [];
-    populateReportSelect();
-  }
-});
+  // Focus handler to show list
+  elements.companyInput.addEventListener("focus", () => {
+    if (state.companies.length > 0) {
+      elements.companyList.classList.remove("hidden");
+    } else {
+      fetchCompanies(elements.companyInput.value);
+    }
+  });
+
+  // Click outside to close
+  document.addEventListener("click", (e: Event) => {
+    const target = e.target as HTMLElement;
+    if (
+      !elements.companyInput.contains(target) &&
+      !elements.companyList.contains(target)
+    ) {
+      elements.companyList.classList.add("hidden");
+    }
+  });
+}
 
 elements.reportSelect.addEventListener("change", async (e: Event) => {
   const target = e.target as HTMLSelectElement;

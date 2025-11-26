@@ -17,10 +17,11 @@
         <main>
             <div class="filters">
                 <div class="filter-group">
-                    <label for="company-select">Company:</label>
-                    <select id="company-select" disabled>
-                        <option value="">Loading companies...</option>
-                    </select>
+                    <label for="company-combobox-input">Company:</label>
+                    <div class="combobox-container">
+                        <input type="text" id="company-combobox-input" class="combobox-input" placeholder="Search and select company..." autocomplete="off">
+                        <ul id="company-combobox-list" class="combobox-list hidden"></ul>
+                    </div>
                 </div>
 
                 <div class="filter-group">

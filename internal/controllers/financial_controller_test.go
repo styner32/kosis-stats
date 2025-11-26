@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"kosis/internal/config"
+	"kosis/internal/controllers"
 	"kosis/internal/db"
 	"kosis/internal/models"
 	"kosis/internal/routes"
@@ -76,16 +77,16 @@ var _ = Describe("FinancialController", func() {
 
 			company1 := models.Company{
 				CorpCode:         "10000001",
-				CorpName:         "Company 1",
-				CorpEngName:      "Company 1 Eng",
+				CorpName:         "테스트전기",
+				CorpEngName:      "Electric Eng",
 				LastModifiedDate: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
 			}
 			createCompany(dbConn, ctx, &company1)
 
 			company2 := models.Company{
 				CorpCode:         "10000002",
-				CorpName:         "Company 2",
-				CorpEngName:      "Company 2 Eng",
+				CorpName:         "테스트화학",
+				CorpEngName:      "Chemical Eng",
 				LastModifiedDate: time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC),
 			}
 			createCompany(dbConn, ctx, &company2)
@@ -116,9 +117,44 @@ var _ = Describe("FinancialController", func() {
 			router.ServeHTTP(resp, req)
 
 			Expect(resp.Code).To(Equal(http.StatusOK))
-			var body map[string]interface{}
+
+			var body struct {
+				Companies []controllers.CompanyResponse `json:"companies"`
+			}
+
 			Expect(json.Unmarshal(resp.Body.Bytes(), &body)).To(Succeed())
-			Expect(body["companies"]).To(HaveLen(2))
+			Expect(body.Companies).To(HaveLen(2))
+		})
+
+		It("filters companies by name", func() {
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/companies?search=화", nil)
+			resp := httptest.NewRecorder()
+
+			router.ServeHTTP(resp, req)
+
+			Expect(resp.Code).To(Equal(http.StatusOK))
+			var body struct {
+				Companies []controllers.CompanyResponse `json:"companies"`
+			}
+
+			Expect(json.Unmarshal(resp.Body.Bytes(), &body)).To(Succeed())
+			Expect(body.Companies).To(HaveLen(1))
+			Expect(body.Companies[0].CorpName).To(Equal("테스트화학"))
+		})
+
+		It("filters companies by eng name", func() {
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/companies?search=Elec", nil)
+			resp := httptest.NewRecorder()
+
+			router.ServeHTTP(resp, req)
+
+			Expect(resp.Code).To(Equal(http.StatusOK))
+			var body struct {
+				Companies []controllers.CompanyResponse `json:"companies"`
+			}
+			Expect(json.Unmarshal(resp.Body.Bytes(), &body)).To(Succeed())
+			Expect(body.Companies).To(HaveLen(1))
+			Expect(body.Companies[0].CorpName).To(Equal("테스트전기"))
 		})
 	})
 

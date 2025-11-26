@@ -79,7 +79,8 @@ export interface AppState {
 
 // DOM Elements Type
 export interface DOMElements {
-  companySelect: HTMLSelectElement;
+  companyInput: HTMLInputElement;
+  companyList: HTMLUListElement;
   reportSelect: HTMLSelectElement;
   yearSelect: HTMLSelectElement;
   loading: HTMLElement;
