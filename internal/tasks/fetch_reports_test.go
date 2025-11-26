@@ -184,6 +184,8 @@ var _ = Describe("HandleFetchReportsTask", func() {
 
 		analysis, err := gorm.G[models.Analysis](dbConn).Where("raw_report_id = ?", result.ID).First(ctx)
 		Expect(err).NotTo(HaveOccurred())
+
+		Expect(analysis.UsedTokens).To(Equal(int64(123)))
 		var analysisData map[string]interface{}
 		Expect(json.Unmarshal(analysis.Analysis, &analysisData)).NotTo(HaveOccurred())
 		Expect(analysisData["company_name"]).To(Equal("LG화학"))

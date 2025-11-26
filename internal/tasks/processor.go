@@ -106,7 +106,7 @@ func (p *TaskProcessor) HandleFetchReportsTask(ctx context.Context, t *asynq.Tas
 			log.Printf("unknown report type: %s", doc.ReportTitle)
 		}
 
-		analysis, err := p.fileAnalyzer.AnalyzeReport(ctx, string(j), reportType)
+		analysis, usedTokens, err := p.fileAnalyzer.AnalyzeReport(ctx, string(j), reportType)
 		if err != nil {
 			log.Printf("failed to analyze report: %v", err)
 			continue
@@ -132,6 +132,7 @@ func (p *TaskProcessor) HandleFetchReportsTask(ctx context.Context, t *asynq.Tas
 		result = gorm.WithResult()
 		err = gorm.G[models.Analysis](p.DB, result).Create(ctx, &models.Analysis{
 			RawReportID: rawReport.ID,
+			UsedTokens:  usedTokens,
 			Analysis:    analysisJSON,
 		})
 		if err != nil {

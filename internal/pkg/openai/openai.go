@@ -111,7 +111,7 @@ type IssuanceTermsExtract struct {
 
 const (
 	defaultModel     = shared.ResponsesModel("gpt-5.1")
-	previewByteLimit = 128 * 1024 // cap what we send to the model
+	previewByteLimit = 128 * 1024 // cap what we send to the model, 128KB
 )
 
 var (
@@ -183,6 +183,7 @@ func (a *FileAnalyzer) AnalyzeFile(ctx context.Context, filePath string, docType
 				responses.ResponseInputItemParamOfMessage(prompt, responses.EasyInputMessageRoleUser),
 			},
 		},
+		ServiceTier: responses.ResponseNewParamsServiceTierFlex,
 		//		Reasoning: shared.ReasoningParam{
 		//			Effort:  shared.ReasoningEffortHigh,
 		//			Summary: shared.ReasoningSummaryDetailed,
@@ -210,7 +211,7 @@ func (a *FileAnalyzer) AnalyzeFile(ctx context.Context, filePath string, docType
 	return report, nil
 }
 
-func (a *FileAnalyzer) AnalyzeReport(ctx context.Context, contents string, docType string) (interface{}, error) {
+func (a *FileAnalyzer) AnalyzeReport(ctx context.Context, contents string, docType string) (interface{}, int64, error) {
 	mainPrompt := systemPrompt
 	prompt := ""
 	var report interface{}
@@ -246,17 +247,19 @@ func (a *FileAnalyzer) AnalyzeReport(ctx context.Context, contents string, docTy
 		//		},
 	})
 
+	log.Printf("input: %d, output: %d, total: %d\n", resp.Usage.InputTokens, resp.Usage.OutputTokens, resp.Usage.TotalTokens)
+
 	if err != nil {
-		return nil, fmt.Errorf("call OpenAI: %w", err)
+		return nil, 0, fmt.Errorf("call OpenAI: %w", err)
 	}
 
 	output := strings.TrimSpace(resp.OutputText())
 	if output == "" {
-		return nil, errors.New("model returned an empty response")
+		return nil, 0, errors.New("model returned an empty response")
 	}
 
 	if err := json.Unmarshal([]byte(output), report); err != nil {
-		return nil, fmt.Errorf("unmarshal JSON: %w", err)
+		return nil, 0, fmt.Errorf("unmarshal JSON: %w", err)
 	}
 
 	// if docType == "report" {
@@ -264,7 +267,7 @@ func (a *FileAnalyzer) AnalyzeReport(ctx context.Context, contents string, docTy
 	// 	log.Printf("Trend Metrics: %+v\n", metrics)
 	// }
 
-	return report, nil
+	return report, resp.Usage.TotalTokens, nil
 }
 
 func buildPrompt(rawContents string, additionalPrompt string) string {
