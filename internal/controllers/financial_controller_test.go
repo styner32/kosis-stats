@@ -37,16 +37,18 @@ func createCompany(dbConn *gorm.DB, ctx context.Context, company *models.Company
 	Expect(result.RowsAffected).To(Equal(int64(1)))
 }
 
-func createRawReport(dbConn *gorm.DB, ctx context.Context, rawReport *models.RawReport) {
+func createRawReport(dbConn *gorm.DB, ctx context.Context, rawReport *models.RawReport) *models.RawReport {
 	result := gorm.WithResult()
 	Expect(gorm.G[models.RawReport](dbConn, result).Create(ctx, rawReport)).To(Succeed())
 	Expect(result.RowsAffected).To(Equal(int64(1)))
+	return rawReport
 }
 
-func createAnalysis(dbConn *gorm.DB, ctx context.Context, analysis *models.Analysis) {
+func createAnalysis(dbConn *gorm.DB, ctx context.Context, analysis *models.Analysis) *models.Analysis {
 	result := gorm.WithResult()
 	Expect(gorm.G[models.Analysis](dbConn, result).Create(ctx, analysis)).To(Succeed())
 	Expect(result.RowsAffected).To(Equal(int64(1)))
+	return analysis
 }
 
 var _ = Describe("FinancialController", func() {
@@ -261,6 +263,122 @@ var _ = Describe("FinancialController", func() {
 			}
 			Expect(json.Unmarshal(resp.Body.Bytes(), &body)).To(Succeed())
 			Expect(body.RawReport).To(Equal(base64.StdEncoding.EncodeToString([]byte("doc1"))))
+		})
+	})
+
+	Describe("GET /api/v1/mcp/reports/by-corp-name", func() {
+		BeforeEach(func() {
+			ctx := context.Background()
+
+			company1 := models.Company{
+				CorpCode: "20000001",
+				CorpName: "Alpha Corp",
+			}
+			createCompany(dbConn, ctx, &company1)
+
+			company2 := models.Company{
+				CorpCode: "20000002",
+				CorpName: "Alpha Industries",
+			}
+			createCompany(dbConn, ctx, &company2)
+
+			company3 := models.Company{
+				CorpCode: "20000003",
+				CorpName: "Beta Ltd",
+			}
+			createCompany(dbConn, ctx, &company3)
+
+			// Create reports for Alpha Corp
+			rawReportA := createRawReport(dbConn, ctx, &models.RawReport{
+				ReceiptNumber: "20251123000100",
+				CorpCode:      "20000001",
+				BlobData:      []byte("data"),
+				JSONData:      json.RawMessage(`{}`),
+			})
+
+			rawReportB := createRawReport(dbConn, ctx, &models.RawReport{
+				ReceiptNumber: "20251123000101",
+				CorpCode:      "20000001",
+				BlobData:      []byte("data"),
+				JSONData:      json.RawMessage(`{}`),
+			})
+
+			// Create report for Alpha Industries
+			rawReportC := createRawReport(dbConn, ctx, &models.RawReport{
+				ReceiptNumber: "20251123000200",
+				CorpCode:      "20000002",
+				BlobData:      []byte("data"),
+				JSONData:      json.RawMessage(`{}`),
+			})
+
+			// Create report for Beta Ltd
+			rawReportD := createRawReport(dbConn, ctx, &models.RawReport{
+				ReceiptNumber: "20251123000300",
+				CorpCode:      "20000003",
+				BlobData:      []byte("data"),
+				JSONData:      json.RawMessage(`{}`),
+			})
+
+			createAnalysis(dbConn, ctx, &models.Analysis{
+				RawReportID: rawReportA.ID,
+				Analysis:    json.RawMessage(`{"summary":"a"}`),
+			})
+
+			createAnalysis(dbConn, ctx, &models.Analysis{
+				RawReportID: rawReportB.ID,
+				Analysis:    json.RawMessage(`{"summary":"b"}`),
+			})
+
+			createAnalysis(dbConn, ctx, &models.Analysis{
+				RawReportID: rawReportC.ID,
+				Analysis:    json.RawMessage(`{"summary":"c"}`),
+			})
+
+			createAnalysis(dbConn, ctx, &models.Analysis{
+				RawReportID: rawReportD.ID,
+				Analysis:    json.RawMessage(`{"summary":"d"}`),
+			})
+		})
+
+		It("returns reports matching the corp name partially", func() {
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/mcp/reports/by-corp-name?corp_name=Alpha", nil)
+			resp := httptest.NewRecorder()
+
+			router.ServeHTTP(resp, req)
+
+			Expect(resp.Code).To(Equal(http.StatusOK))
+
+			var body struct {
+				Reports []models.RawReport `json:"reports"`
+			}
+			Expect(json.Unmarshal(resp.Body.Bytes(), &body)).To(Succeed())
+
+			// Alpha Corp (2) + Alpha Industries (1) = 3
+			Expect(body.Reports).To(HaveLen(3))
+		})
+
+		It("returns 400 if corp_name is missing", func() {
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/mcp/reports/by-corp-name", nil)
+			resp := httptest.NewRecorder()
+
+			router.ServeHTTP(resp, req)
+
+			Expect(resp.Code).To(Equal(http.StatusBadRequest))
+		})
+
+		It("respects the limit parameter", func() {
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/mcp/reports/by-corp-name?corp_name=Alpha&limit=2", nil)
+			resp := httptest.NewRecorder()
+
+			router.ServeHTTP(resp, req)
+
+			Expect(resp.Code).To(Equal(http.StatusOK))
+
+			var body struct {
+				Reports []models.RawReport `json:"reports"`
+			}
+			Expect(json.Unmarshal(resp.Body.Bytes(), &body)).To(Succeed())
+			Expect(body.Reports).To(HaveLen(2))
 		})
 	})
 })

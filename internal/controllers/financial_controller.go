@@ -2,10 +2,12 @@ package controllers
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"kosis/internal/models"
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -23,6 +25,15 @@ type CompanyResponse struct {
 	LastModifiedDate string `json:"last_modified_date"`
 	CreatedAt        string `json:"created_at"`
 	UpdatedAt        string `json:"updated_at"`
+}
+
+type ReportResponse struct {
+	ID          uint            `json:"id"`
+	RawReportID uint            `json:"raw_report_id"`
+	UsedTokens  int64           `json:"used_tokens"`
+	Analysis    json.RawMessage `json:"analysis"`
+	CreatedAt   string          `json:"created_at"`
+	UpdatedAt   string          `json:"updated_at"`
 }
 
 // GetCompanies returns a list of all companies
@@ -126,6 +137,37 @@ func (fc *FinancialController) GetRawReport(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"raw_report": base64.StdEncoding.EncodeToString(rawReport.BlobData),
+	})
+}
+
+// GetReportsByCorpName returns a JSON list of recent reports for a partial corp_name.
+// This is a non-streaming variant for MCP/Claude clients that expect a simple HTTP response.
+func (fc *FinancialController) GetReportsByCorpName(c *gin.Context) {
+	corpName := strings.TrimSpace(c.Query("corp_name"))
+	if corpName == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "corp_name is required"})
+		return
+	}
+
+	limit := getLimitWithDefault(c, 10)
+
+	var analyses []models.Analysis
+	err := fc.DB.
+		Model(&models.Analysis{}).
+		Joins("JOIN raw_reports ON analyses.raw_report_id = raw_reports.id").
+		Joins("JOIN companies ON companies.corp_code = raw_reports.corp_code").
+		Where("companies.corp_name ILIKE ?", "%"+corpName+"%").
+		Order("raw_reports.receipt_number DESC").
+		Limit(limit).
+		Find(&analyses).Error
+	if err != nil {
+		log.Printf("failed to fetch reports by corp_name (non-stream): %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Something went wrong"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"reports": analyses,
 	})
 }
 

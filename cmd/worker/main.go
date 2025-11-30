@@ -81,6 +81,9 @@ func main() {
 		taskProcessor.HandleFetchCompaniesTask,
 	)
 
+	// To submit manually
+	// asynqClient.Enqueue(fetchCompaniesTask)
+
 	go func() {
 		log.Println("Starting Asynq scheduler...")
 		if err := scheduler.Run(); err != nil {

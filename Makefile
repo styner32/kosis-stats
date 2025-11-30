@@ -8,6 +8,9 @@ CMD_DIR ?= cmd
 run: ## Run the app: go run
 	go run $(CMD_DIR)/api/main.go
 
+run-mcp: ## Run the MCP stdio server
+	go run $(CMD_DIR)/mcp/main.go
+
 run-worker: ## Run the worker: go run
 	go run $(CMD_DIR)/worker/main.go
 
@@ -17,8 +20,11 @@ run-web: ## Run the web server: npm run serve
 run-web-serve: ## Run the web server: npm run serve
 	cd web && npm run serve
 
+build-mcp: ## Build the MCP server
+	go build -o bin/kosis-mcp $(CMD_DIR)/mcp/main.go
+
 test: ## Run the tests
-	go test ./...
+	DATABASE_URL=$(TEST_DATABASE_URL) go test ./...
 
 migrate-up: ## Run all up migrations
 ifndef DATABASE_URL

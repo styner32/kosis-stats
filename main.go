@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"kosis/internal/pkg/dart"
+	"kosis/internal/pkg/dataapi"
 	"kosis/internal/pkg/openai"
 	"log"
 	"os"
@@ -22,6 +23,18 @@ func main() {
 	if dartApiKey == "" {
 		log.Fatal("DART_API_KEY is not set")
 	}
+
+	dataApiKey := os.Getenv("DATA_API_KEY")
+	if dataApiKey == "" {
+		log.Fatal("DATA_API_KEY is not set")
+	}
+
+	dataapiClient := dataapi.New(dataApiKey)
+	stockPrice, err := dataapiClient.GetStockPrice("삼성전자")
+	if err != nil {
+		log.Fatalf("Failed to get stock price: %v", err)
+	}
+	log.Printf("stockPrice: %+v", stockPrice)
 
 	// kosisClient := kosis.New(apiKey)
 	// if err := kosisClient.Search(); err != nil {
@@ -45,7 +58,7 @@ func main() {
 	// data/receipts/00485177/20251031900992.html // 일진파워, 단일판매ㆍ공급계약체결
 	// data/receipts/01515323/20250814001590.html // LG에너지솔루션, 반기보고서 (2025.06)
 	// data/receipts/00126380/20250515001922.html // 삼성전자, 반기보고서 (2025.03)
-	analyzeCorrectionReport("data/receipts/00126380/", "20250515001922")
+	// analyzeCorrectionReport("data/receipts/00126380/", "20250515001922")
 }
 
 func analyzeCorrectionReport(folderName string, reportNumber string) {
