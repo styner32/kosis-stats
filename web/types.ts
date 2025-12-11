@@ -27,6 +27,7 @@ export interface RawReport {
   UpdatedAt?: string;
   // Fallback fields
   id?: number;
+  raw_report_id?: number;
   receipt_number?: string;
   receiptNumber?: string;
   recept_no?: string;
@@ -43,6 +44,16 @@ export interface RawReport {
   reportName?: string;
 }
 
+export interface Report {
+  corp_name?: string;
+  corp_code?: string;
+  report_name?: string;
+  raw_report_id?: number;
+  receipt_number?: string;
+  analysis?: unknown;
+  [key: string]: unknown;
+}
+
 export interface RawReportResponse {
   raw_report: string;
 }
@@ -52,14 +63,15 @@ export interface CompaniesResponse {
 }
 
 export interface ReportsResponse {
-    reports: RawReport[];
+  reports: RawReport[];
 }
 
 export interface RawReportResponse {
-    raw_report: string;
+  raw_report: string;
 }
 
-export interface HealthResponse {  status: string;
+export interface HealthResponse {
+  status: string;
 }
 
 export interface FinancialsResponse {
@@ -69,13 +81,13 @@ export interface FinancialsResponse {
 // State Type
 export interface AppState {
   companies: Company[];
-  reports: RawReport[];
+  reports: Report[];
   selectedCompany: string | null;
   selectedReport: string | null;
   selectedYear: string | null;
   loading: boolean;
   error: string | null;
-  currentTab: 'dashboard' | 'reports';
+  currentTab: "dashboard" | "reports";
 }
 
 // DOM Elements Type
@@ -84,7 +96,7 @@ export interface DOMElements {
   tabButtons: NodeListOf<Element>;
   dashboardView: HTMLElement;
   reportsView: HTMLElement;
-  
+
   // Dashboard Elements
   companyInput: HTMLInputElement;
   companyList: HTMLUListElement;

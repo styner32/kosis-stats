@@ -4,7 +4,6 @@ import {
   CompaniesResponse,
   ReportsResponse,
   HealthResponse,
-  FinancialsResponse,
   AppState,
   DOMElements,
   RequestOptions,
@@ -550,6 +549,7 @@ function displayReportDetails(
     "Analysis",
     "analysis"
   );
+
   let parsedAnalysis: Record<string, unknown> | unknown = analysisData;
   if (typeof analysisData === "string") {
     try {
@@ -681,6 +681,7 @@ function displayReportDetails(
   }
 
   html += "</div>";
+
   target.innerHTML = html;
 
   if (!container) {
@@ -906,11 +907,17 @@ if (elements.reportListContainer) {
           const detailTr = document.createElement("tr");
           detailTr.className = "detail-row";
           const detailTd = document.createElement("td");
-          detailTd.colSpan = 4; // Matches column count
+          detailTd.colSpan = 6; // Matches column count
 
-          // Render details
-          displayReportDetails(report, null, detailTd);
+          const ar: AnalysisRecord = {
+            RawReportID: report.raw_report_id,
+            Analysis: report.analysis,
+          };
+          displayReportDetails(ar, null, detailTd);
 
+          detailTr.appendChild(detailTd);
+
+          console.log("detailTr", detailTr, detailTd);
           tr.after(detailTr);
         }
       }
