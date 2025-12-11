@@ -435,15 +435,31 @@ function renderReportTable(): void {
   }
 
   let html = '<table class="data-table">';
-  html +=
-    "<thead><tr><th>Company</th><th>Name</th><th>Date</th><th>Receipt #</th></tr></thead>";
+  html += `<thead>
+      <tr>
+        <th>Corp Code</th>
+        <th>Corp Name</th>
+        <th>Name</th>
+        <th>Date</th>
+        <th>Report Type</th>
+        <th>Receipt #</th>
+      </tr>
+    </thead>`;
+
   html += "<tbody>";
 
-  reports.forEach((r) => {
+  reports.forEach((r, index) => {
     const corpCode =
       getFieldValue(r as Record<string, unknown>, "CorpCode", "corp_code") ||
       state.selectedCompany ||
       "-";
+    const corpName =
+      getFieldValue<string>(
+        r as Record<string, unknown>,
+        "CorpName",
+        "corp_name"
+      ) || "-";
+
     const name =
       getFieldValue(
         r as Record<string, unknown>,
@@ -456,24 +472,24 @@ function renderReportTable(): void {
         r as Record<string, unknown>,
         "ReceiptNumber",
         "receipt_number"
-      ) ||
-      getFieldValue(
-        r as Record<string, unknown>,
-        "RawReportID",
-        "raw_report_id"
-      ) ||
-      "-";
+      ) || "-";
 
-    const dateRaw = (receipt as string).substring(0, 8);
-    const date = `${dateRaw.substring(0, 4)}-${dateRaw.substring(
-      4,
-      6
-    )}-${dateRaw.substring(6, 8)}`;
+    const dateRaw = receipt ? (receipt as string).substring(0, 8) : "-";
+    const date = dateRaw
+      ? `${dateRaw.substring(0, 4)}-${dateRaw.substring(
+          4,
+          6
+        )}-${dateRaw.substring(6, 8)}`
+      : "-";
 
-    html += `<tr>
+    const reportType = receipt ? (receipt as string).substring(8, 9) : "-";
+
+    html += `<tr data-index="${index}">
             <td>${corpCode}</td>
+            <td>${corpName}</td>
             <td>${name}</td>
             <td>${date}</td>
+            <td>${reportType}</td>
             <td>${receipt}</td>
         </tr>`;
   });
@@ -486,10 +502,13 @@ let currentObjectUrl: string | null = null;
 
 function displayReportDetails(
   data: AnalysisRecord | RawReport | null,
-  rawReport: RawReport | null
+  rawReport: RawReport | null,
+  container: HTMLElement | null = null
 ): void {
+  const target = container || elements.reportDetails;
+
   if (!data) {
-    elements.reportDetails.innerHTML =
+    target.innerHTML =
       '<div class="empty-state">No report details available</div>';
     return;
   }
@@ -551,7 +570,7 @@ function displayReportDetails(
 
   if (rawReport && rawReport.BlobData) {
     // Clean up previous object URL
-    if (currentObjectUrl) {
+    if (!container && currentObjectUrl) {
       URL.revokeObjectURL(currentObjectUrl);
       currentObjectUrl = null;
     }
@@ -628,16 +647,20 @@ function displayReportDetails(
         const blob = new Blob([reportContent], {
           type: "text/html; charset=utf-8",
         });
-        currentObjectUrl = URL.createObjectURL(blob);
-        html += `<iframe src="${currentObjectUrl}" sandbox="allow-scripts" style="width: 100%; height: 600px; border: 1px solid #ccc; background-color: white;"></iframe>`;
+        const objUrl = URL.createObjectURL(blob);
+        if (!container) currentObjectUrl = objUrl;
+
+        html += `<iframe src="${objUrl}" sandbox="allow-scripts" style="width: 100%; height: 600px; border: 1px solid #ccc; background-color: white;"></iframe>`;
         html +=
           '<p class="note" style="font-size: 0.8em; color: #666; margin-top: 5px;">Rendering as HTML.</p>';
       } else if (looksLikeXml) {
         const blob = new Blob([reportContent], {
           type: "text/xml; charset=utf-8",
         });
-        currentObjectUrl = URL.createObjectURL(blob);
-        html += `<iframe src="${currentObjectUrl}" sandbox="allow-scripts" style="width: 100%; height: 600px; border: 1px solid #ccc; background-color: white;"></iframe>`;
+        const objUrl = URL.createObjectURL(blob);
+        if (!container) currentObjectUrl = objUrl;
+
+        html += `<iframe src="${objUrl}" sandbox="allow-scripts" style="width: 100%; height: 600px; border: 1px solid #ccc; background-color: white;"></iframe>`;
         html +=
           '<p class="note" style="font-size: 0.8em; color: #666; margin-top: 5px;">Rendering as XML.</p>';
       } else {
@@ -653,26 +676,35 @@ function displayReportDetails(
     html += "</div>";
   } else {
     html += '<div class="action-area">';
-    html += `<button id="btn-load-raw" class="primary-button" data-report-id="${rawReportId}">Load Raw Report</button>`;
+    html += `<button class="primary-button btn-load-raw" data-report-id="${rawReportId}">Load Raw Report</button>`;
     html += "</div>";
   }
 
   html += "</div>";
-  elements.reportDetails.innerHTML = html;
-  elements.results.classList.remove("hidden");
+  target.innerHTML = html;
 
-  const loadBtn = document.getElementById("btn-load-raw");
+  if (!container) {
+    elements.results.classList.remove("hidden");
+  }
+
+  const loadBtn = target.querySelector(".btn-load-raw");
   if (loadBtn) {
-    loadBtn.addEventListener("click", async () => {
-      if (state.selectedCompany) {
+    loadBtn.addEventListener("click", async (e: Event) => {
+      e.stopPropagation(); // Stop bubbling
+      const corpCode =
+        getFieldValue<string>(
+          data as Record<string, unknown>,
+          "CorpCode",
+          "corp_code"
+        ) || state.selectedCompany;
+      if (corpCode) {
         const idToFetch = loadBtn.getAttribute("data-report-id");
         if (idToFetch) {
-          const fetchedRawReport = await fetchRawReport(
-            state.selectedCompany,
-            idToFetch
-          );
-          displayReportDetails(data, fetchedRawReport);
+          const fetchedRawReport = await fetchRawReport(corpCode, idToFetch);
+          displayReportDetails(data, fetchedRawReport, container);
         }
+      } else {
+        showError("Cannot determine company code for this report.");
       }
     });
   }
@@ -841,6 +873,50 @@ elements.yearSelect.addEventListener("change", (e: Event) => {
     if (report) displayReportDetails(report, null);
   }
 });
+
+// Report List Click Handler (Delegation)
+if (elements.reportListContainer) {
+  elements.reportListContainer.addEventListener("click", (e: Event) => {
+    const target = e.target as HTMLElement;
+    const tr = target.closest("tr");
+
+    if (!tr || !elements.reportListContainer.contains(tr)) return;
+    if (tr.classList.contains("detail-row")) return; // Ignore clicks in detail row
+
+    // Check if we are clicking on the same row that is already expanded
+    const nextSibling = tr.nextElementSibling;
+    const isExpanded =
+      nextSibling && nextSibling.classList.contains("detail-row");
+
+    // Close any existing detail row
+    const existingDetail =
+      elements.reportListContainer.querySelector(".detail-row");
+    if (existingDetail) {
+      existingDetail.remove();
+    }
+
+    // If it was already expanded, we just toggled it off (by removing above).
+    // If it wasn't expanded, we open it now.
+    if (!isExpanded) {
+      const indexStr = tr.dataset.index;
+      if (indexStr !== undefined) {
+        const index = parseInt(indexStr, 10);
+        const report = state.reports[index];
+        if (report) {
+          const detailTr = document.createElement("tr");
+          detailTr.className = "detail-row";
+          const detailTd = document.createElement("td");
+          detailTd.colSpan = 4; // Matches column count
+
+          // Render details
+          displayReportDetails(report, null, detailTd);
+
+          tr.after(detailTr);
+        }
+      }
+    }
+  });
+}
 
 // Report List Filters
 [elements.dateStart, elements.dateEnd, elements.sortOrder].forEach((el) => {

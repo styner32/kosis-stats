@@ -51,6 +51,7 @@ func (p *TaskProcessor) HandleFetchReportsTask(ctx context.Context, t *asynq.Tas
 		return nil
 	}
 
+	totalUsedTokens := int64(0)
 	for _, rawReport := range rawReports {
 		count, err := gorm.G[models.RawReport](p.DB).Where("receipt_number = ?", rawReport.RceptNo).Count(ctx, "id")
 		if err != nil {
@@ -180,7 +181,11 @@ func (p *TaskProcessor) HandleFetchReportsTask(ctx context.Context, t *asynq.Tas
 			return err
 		}
 
-		log.Printf("stored raw report: %s, %s, %d", rawReport.ReceiptNumber, rawReport.CorpCode, rawReport.BlobSize)
+		log.Printf("stored raw report: %s, %s, %d, %d", rawReport.ReceiptNumber, rawReport.CorpCode, rawReport.BlobSize, usedTokens)
+
+		totalUsedTokens += usedTokens
+
+		log.Printf("total used tokens: %d", totalUsedTokens)
 	}
 
 	log.Println("Reports fetched successfully")

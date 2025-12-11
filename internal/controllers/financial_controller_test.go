@@ -303,6 +303,7 @@ var _ = Describe("FinancialController", func() {
 			Expect(resp.Body.String()).To(MatchJSON(`{
 				"reports": [
 					{
+						"corp_name": "Company B",
 						"corp_code": "10000002",
 						"report_name": "Report B",
 						"raw_report_id": 2,
@@ -310,6 +311,7 @@ var _ = Describe("FinancialController", func() {
 						"analysis": {"summary": "b"}
 					},
 					{
+						"corp_name": "Company A",
 						"corp_code": "10000001",
 						"report_name": "Report A",
 						"raw_report_id": 1,

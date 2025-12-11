@@ -363,6 +363,26 @@ header h1 {
     color: var(--text);
 }
 
+.data-table tr {
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
 .data-table tr:hover {
+    background-color: #f1f5f9;
+}
+
+/* Detail Row Styles */
+.detail-row {
     background-color: #f8fafc;
+}
+
+.detail-row td {
+    padding: 0;
+    border-bottom: 1px solid var(--border);
+}
+
+.detail-content {
+    padding: 1.5rem;
+    border-left: 4px solid var(--primary-color);
 }

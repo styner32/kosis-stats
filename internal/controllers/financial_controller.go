@@ -28,6 +28,7 @@ type CompanyResponse struct {
 }
 
 type ReportResponse struct {
+	CorpName      string          `json:"corp_name"`
 	CorpCode      string          `json:"corp_code"`
 	ReportName    string          `json:"report_name"`
 	RawReportID   uint            `json:"raw_report_id"`
@@ -182,7 +183,7 @@ func (fc *FinancialController) GetAllReports(c *gin.Context) {
 	var reports []ReportResponse
 	err := fc.DB.
 		Model(&models.Analysis{}).
-		Select("analyses.raw_report_id, raw_reports.receipt_number, raw_reports.corp_code, raw_reports.report_name, analyses.analysis").
+		Select("analyses.raw_report_id, raw_reports.receipt_number, raw_reports.corp_code, companies.corp_name, raw_reports.report_name, analyses.analysis").
 		Joins("JOIN raw_reports ON analyses.raw_report_id = raw_reports.id").
 		Joins("JOIN companies ON companies.corp_code = raw_reports.corp_code").
 		Order("raw_reports.receipt_number DESC").
