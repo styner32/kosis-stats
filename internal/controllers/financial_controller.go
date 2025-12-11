@@ -28,12 +28,11 @@ type CompanyResponse struct {
 }
 
 type ReportResponse struct {
-	ID          uint            `json:"id"`
-	RawReportID uint            `json:"raw_report_id"`
-	UsedTokens  int64           `json:"used_tokens"`
-	Analysis    json.RawMessage `json:"analysis"`
-	CreatedAt   string          `json:"created_at"`
-	UpdatedAt   string          `json:"updated_at"`
+	CorpCode      string          `json:"corp_code"`
+	ReportName    string          `json:"report_name"`
+	RawReportID   uint            `json:"raw_report_id"`
+	ReceiptNumber string          `json:"receipt_number"`
+	Analysis      json.RawMessage `json:"analysis"`
 }
 
 // GetCompanies returns a list of all companies
@@ -84,8 +83,8 @@ func (fc *FinancialController) GetCompanies(c *gin.Context) {
 	})
 }
 
-// GetReports returns a list of reports, optionally filtered by corp_code
-func (fc *FinancialController) GetReports(c *gin.Context) {
+// GetReportsByCorpCode returns a list of reports, optionally filtered by corp_code
+func (fc *FinancialController) GetReportsByCorpCode(c *gin.Context) {
 	corpCode := c.Param("corp_code")
 
 	var company models.Company
@@ -169,6 +168,34 @@ func (fc *FinancialController) GetReportsByCorpName(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"reports": analyses,
 	})
+}
+
+// GetAllReports returns a list of all reports
+// Possible query parameters:
+// - limit: limit the number of reports to return
+// - offset: offset the number of reports to return
+// - sort: order the reports by the given field
+// - date: order the reports by the given date
+func (fc *FinancialController) GetAllReports(c *gin.Context) {
+	limit := getLimitWithDefault(c, 10)
+
+	var reports []ReportResponse
+	err := fc.DB.
+		Model(&models.Analysis{}).
+		Select("analyses.raw_report_id, raw_reports.receipt_number, raw_reports.corp_code, raw_reports.report_name, analyses.analysis").
+		Joins("JOIN raw_reports ON analyses.raw_report_id = raw_reports.id").
+		Joins("JOIN companies ON companies.corp_code = raw_reports.corp_code").
+		Order("raw_reports.receipt_number DESC").
+		Limit(limit).
+		Scan(&reports).Error
+
+	if err != nil {
+		log.Printf("failed to get all reports: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Something went wrong"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"reports": reports})
 }
 
 func getLimitWithDefault(c *gin.Context, defaultValue int) int {

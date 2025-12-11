@@ -87,6 +87,7 @@ func (p *TaskProcessor) HandleFetchReportsTask(ctx context.Context, t *asynq.Tas
 
 		rawReport := models.RawReport{
 			ReceiptNumber: rawReport.RceptNo,
+			ReportName:    rawReport.ReportNm,
 			CorpCode:      rawReport.CorpCode,
 			BlobData:      []byte(rawDocument),
 			BlobSize:      len(rawDocument),
@@ -106,10 +107,22 @@ func (p *TaskProcessor) HandleFetchReportsTask(ctx context.Context, t *asynq.Tas
 			log.Printf("unknown report type: %s", doc.ReportTitle)
 		}
 
-		analysis, usedTokens, err := p.fileAnalyzer.AnalyzeReport(ctx, string(j), reportType)
-		if err != nil {
-			log.Printf("failed to analyze report: %v", err)
-			continue
+		reportLength := len(j)
+		var analysis interface{}
+		var usedTokens int64
+		if reportLength > openai.PreviewByteLimit {
+			log.Printf("analyzing report with batch API: %s", rawReport.ReceiptNumber)
+			analysis, usedTokens, err = p.fileAnalyzer.AnalyzeReportBatch(ctx, string(j), reportType)
+			if err != nil {
+				log.Printf("failed to analyze report: %v", err)
+				continue
+			}
+		} else {
+			analysis, usedTokens, err = p.fileAnalyzer.AnalyzeReport(ctx, string(j), reportType)
+			if err != nil {
+				log.Printf("failed to analyze report: %v", err)
+				continue
+			}
 		}
 
 		if v, ok := analysis.(*openai.DefaultReport); ok {
@@ -120,6 +133,34 @@ func (p *TaskProcessor) HandleFetchReportsTask(ctx context.Context, t *asynq.Tas
 					continue
 				}
 				v.CompanyName = company.CorpName
+			}
+
+			if v.SchemaSuggestion != "" {
+				structureJSON, err := json.Marshal(v.SchemaSuggestion)
+				if err != nil {
+					log.Printf("failed to marshal schema suggestion: %v", err)
+					continue
+				}
+
+				rt := models.ReportType{
+					Name:              v.Type,
+					Structure:         json.RawMessage(structureJSON),
+					SourceRawReportID: rawReport.ID,
+				}
+
+				result := gorm.WithResult()
+				err = gorm.G[models.ReportType](p.DB, result).Create(ctx, &rt)
+				if err != nil {
+					return err
+				}
+
+				analysis = &openai.DefaultReport{
+					CompanyName:      v.CompanyName,
+					Date:             v.Date,
+					Type:             v.Type,
+					Summary:          v.Summary,
+					RelatedCompanies: v.RelatedCompanies,
+				}
 			}
 		}
 

@@ -16,6 +16,7 @@ type AnalysisRecord = {
   Analysis?: unknown;
   CreatedAt?: string;
   created_at?: string;
+  [key: string]: unknown;
 };
 
 // Configuration
@@ -31,10 +32,17 @@ const state: AppState = {
   selectedYear: null,
   loading: false,
   error: null,
+  currentTab: "dashboard",
 };
 
 // DOM elements
 const elements: DOMElements = {
+  // Tabs
+  tabButtons: document.querySelectorAll(".tab-btn"),
+  dashboardView: document.getElementById("dashboard-view")!,
+  reportsView: document.getElementById("reports-view")!,
+
+  // Dashboard
   companyInput: document.getElementById(
     "company-combobox-input"
   ) as HTMLInputElement,
@@ -47,6 +55,18 @@ const elements: DOMElements = {
   error: document.getElementById("error")!,
   results: document.getElementById("results")!,
   reportDetails: document.getElementById("report-details")!,
+
+  // Report List
+  listCompanyInput: document.getElementById(
+    "list-company-input"
+  ) as HTMLInputElement,
+  listCompanyList: document.getElementById(
+    "list-company-list"
+  ) as HTMLUListElement,
+  dateStart: document.getElementById("date-start") as HTMLInputElement,
+  dateEnd: document.getElementById("date-end") as HTMLInputElement,
+  sortOrder: document.getElementById("sort-order") as HTMLSelectElement,
+  reportListContainer: document.getElementById("report-list-container")!,
 };
 
 // Debounce utility
@@ -106,15 +126,12 @@ async function apiRequest<T>(
 
 async function fetchCompanies(search: string = ""): Promise<void> {
   try {
-    // Don't show global loading for search interactions to keep UI responsive
-    // showLoading();
     const endpoint = search
       ? `/companies?search=${encodeURIComponent(search)}`
       : "/companies";
     const data = await apiRequest<CompaniesResponse | Company[]>(endpoint);
     state.companies = Array.isArray(data) ? data : data.companies || [];
     renderCompanyList();
-    // hideLoading();
   } catch (error) {
     console.error("Failed to load companies:", error);
     state.companies = [];
@@ -122,30 +139,28 @@ async function fetchCompanies(search: string = ""): Promise<void> {
   }
 }
 
-async function fetchReports(corpCode: string): Promise<void> {
-  if (!corpCode) {
-    state.reports = [];
-    populateReportSelect();
-    return;
-  }
-
+async function fetchReports(
+  corpCode: string = "",
+  limit: number = 100
+): Promise<void> {
   try {
     showLoading();
-    const data = await apiRequest<ReportsResponse | AnalysisRecord[]>(
-      `/reports/${corpCode}`
-    );
+    const endpoint = corpCode
+      ? `/reports/${corpCode}?limit=${limit}`
+      : `/reports?limit=${limit}`;
+
+    const data = await apiRequest<ReportsResponse | AnalysisRecord[]>(endpoint);
     const reports = Array.isArray(data)
       ? data
       : (data as { reports?: AnalysisRecord[] }).reports || [];
     state.reports = reports;
-    populateReportSelect();
-    populateYearSelect();
+    updateUIWithReports();
     hideLoading();
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     showError(`Failed to load reports: ${message}`);
     state.reports = [];
-    populateReportSelect();
+    updateUIWithReports();
   }
 }
 
@@ -172,60 +187,77 @@ async function fetchRawReport(
 }
 
 // UI update functions
+function updateUIWithReports(): void {
+  // Update Dashboard
+  populateReportSelect();
+  populateYearSelect();
+
+  // Update List View
+  renderReportTable();
+}
+
 function renderCompanyList(): void {
-  elements.companyList.innerHTML = "";
+  // Render to both lists (Dashboard and Reports View)
+  [elements.companyList, elements.listCompanyList].forEach((list) => {
+    if (!list) return;
+    list.innerHTML = "";
 
-  if (state.companies.length === 0) {
-    elements.companyList.innerHTML =
-      '<li class="combobox-empty">No companies found</li>';
-    elements.companyList.classList.remove("hidden");
-    return;
-  }
-
-  state.companies.forEach((company) => {
-    const li = document.createElement("li");
-    li.className = "combobox-item";
-
-    const corpCode =
-      getFieldValue<string>(
-        company as Record<string, unknown>,
-        "CorpCode",
-        "corp_code",
-        "corpCode",
-        "id"
-      ) || "";
-    const corpName =
-      getFieldValue<string>(
-        company as Record<string, unknown>,
-        "CorpName",
-        "corp_name",
-        "corpName",
-        "name"
-      ) || `Company ${corpCode}`;
-
-    li.textContent = corpName;
-    li.dataset.value = corpCode;
-
-    if (state.selectedCompany === corpCode) {
-      li.classList.add("selected");
+    if (state.companies.length === 0) {
+      list.innerHTML = '<li class="combobox-empty">No companies found</li>';
+      // list.classList.remove("hidden"); // Don't auto-show empty
+      return;
     }
 
-    li.addEventListener("click", () => {
-      selectCompany(corpCode, corpName);
+    state.companies.forEach((company) => {
+      const li = document.createElement("li");
+      li.className = "combobox-item";
+
+      const corpCode =
+        getFieldValue<string>(
+          company as Record<string, unknown>,
+          "CorpCode",
+          "corp_code",
+          "corpCode",
+          "id"
+        ) || "";
+      const corpName =
+        getFieldValue<string>(
+          company as Record<string, unknown>,
+          "CorpName",
+          "corp_name",
+          "corpName",
+          "name"
+        ) || `Company ${corpCode}`;
+
+      li.textContent = corpName;
+      li.dataset.value = corpCode;
+
+      if (state.selectedCompany === corpCode) {
+        li.classList.add("selected");
+      }
+
+      li.addEventListener("click", () => {
+        selectCompany(corpCode, corpName);
+      });
+
+      list.appendChild(li);
     });
-
-    elements.companyList.appendChild(li);
   });
-
-  elements.companyList.classList.remove("hidden");
 }
 
 function selectCompany(corpCode: string, corpName: string): void {
   state.selectedCompany = corpCode;
-  elements.companyInput.value = corpName;
-  elements.companyList.classList.add("hidden");
 
-  // Clear reports
+  // Update both inputs
+  if (elements.companyInput) elements.companyInput.value = corpName;
+  if (elements.listCompanyInput) elements.listCompanyInput.value = corpName;
+
+  // Hide lists
+  if (elements.companyList) elements.companyList.classList.add("hidden");
+  if (elements.listCompanyList)
+    elements.listCompanyList.classList.add("hidden");
+
+  // Clear selections
   state.selectedReport = null;
   elements.reportSelect.value = "";
   clearReportDetails();
@@ -335,10 +367,125 @@ function populateYearSelect(): void {
   });
 }
 
+function renderReportTable(): void {
+  const container = elements.reportListContainer;
+  if (!container) return;
+
+  let reports = [...state.reports];
+
+  // Filter by Date
+  const startDate = elements.dateStart.value;
+  const endDate = elements.dateEnd.value;
+
+  if (startDate) {
+    reports = reports.filter((r) => {
+      const d = getFieldValue<string>(
+        r as Record<string, unknown>,
+        "CreatedAt",
+        "created_at"
+      );
+      return d ? new Date(d) >= new Date(startDate) : false;
+    });
+  }
+
+  if (endDate) {
+    reports = reports.filter((r) => {
+      const d = getFieldValue<string>(
+        r as Record<string, unknown>,
+        "CreatedAt",
+        "created_at"
+      );
+      if (!d) return false;
+      const rDate = new Date(d);
+      const eDate = new Date(endDate);
+      eDate.setHours(23, 59, 59, 999); // End of that day
+      return rDate <= eDate;
+    });
+  }
+
+  // Sort
+  const sortOrder = elements.sortOrder.value; // 'asc' or 'desc'
+  reports.sort((a, b) => {
+    const d1 =
+      getFieldValue<string>(
+        a as Record<string, unknown>,
+        "CreatedAt",
+        "created_at"
+      ) || "";
+    const d2 =
+      getFieldValue<string>(
+        b as Record<string, unknown>,
+        "CreatedAt",
+        "created_at"
+      ) || "";
+
+    // If dates are missing (e.g. from /reports endpoint), sort might be unstable or grouped
+    if (!d1 && !d2) return 0;
+    if (!d1) return 1;
+    if (!d2) return -1;
+
+    const t1 = new Date(d1).getTime();
+    const t2 = new Date(d2).getTime();
+    return sortOrder === "asc" ? t1 - t2 : t2 - t1;
+  });
+
+  if (reports.length === 0) {
+    container.innerHTML = '<div class="empty-state">No matching reports</div>';
+    return;
+  }
+
+  let html = '<table class="data-table">';
+  html +=
+    "<thead><tr><th>Company</th><th>Name</th><th>Date</th><th>Receipt #</th></tr></thead>";
+  html += "<tbody>";
+
+  reports.forEach((r) => {
+    const corpCode =
+      getFieldValue(r as Record<string, unknown>, "CorpCode", "corp_code") ||
+      state.selectedCompany ||
+      "-";
+    const name =
+      getFieldValue(
+        r as Record<string, unknown>,
+        "ReportName",
+        "report_name"
+      ) || "-";
+
+    const receipt =
+      getFieldValue(
+        r as Record<string, unknown>,
+        "ReceiptNumber",
+        "receipt_number"
+      ) ||
+      getFieldValue(
+        r as Record<string, unknown>,
+        "RawReportID",
+        "raw_report_id"
+      ) ||
+      "-";
+
+    const dateRaw = (receipt as string).substring(0, 8);
+    const date = `${dateRaw.substring(0, 4)}-${dateRaw.substring(
+      4,
+      6
+    )}-${dateRaw.substring(6, 8)}`;
+
+    html += `<tr>
+            <td>${corpCode}</td>
+            <td>${name}</td>
+            <td>${date}</td>
+            <td>${receipt}</td>
+        </tr>`;
+  });
+
+  html += "</tbody></table>";
+  container.innerHTML = html;
+}
+
 let currentObjectUrl: string | null = null;
 
 function displayReportDetails(
-  data: AnalysisRecord | null,
+  data: AnalysisRecord | RawReport | null,
   rawReport: RawReport | null
 ): void {
   if (!data) {
@@ -357,12 +504,6 @@ function displayReportDetails(
     "RawReportID",
     "raw_report_id",
     "rawReportId"
-  );
-  const receiptNumber = getFieldValue<string>(
-    data as Record<string, unknown>,
-    "ReceiptNumber",
-    "receipt_number",
-    "receiptNumber"
   );
   const createdAt = getFieldValue<string>(
     data as Record<string, unknown>,
@@ -419,7 +560,6 @@ function displayReportDetails(
     html += "<h4>Raw Report Content</h4>";
 
     try {
-      // Backend now returns Base64 string to preserve original bytes
       const binaryString = atob(rawReport.BlobData.toString());
       const len = binaryString.length;
       const bytes = new Uint8Array(len);
@@ -427,21 +567,11 @@ function displayReportDetails(
         bytes[i] = binaryString.charCodeAt(i);
       }
 
-      // Decode bytes to string, handling EUC-KR if necessary
-      // We try to detect if it's likely EUC-KR (common for DART)
       let reportContent = "";
       const decoder = new TextDecoder("utf-8", { fatal: false });
       const tempContent = decoder.decode(bytes);
-
-      // Check if UTF-8 decoding resulted in many replacement characters ()
-      // If the file is actually EUC-KR but we decode as UTF-8, we'll get many of these.
-      // If the file is UTF-8 (even with a lying meta tag), we'll get few/none.
       const replacementCount = (tempContent.match(/\uFFFD/g) || []).length;
-
-      // Heuristic: If > 1% of characters are replacements, it's probably not UTF-8
       const isLikelyBrokenUtf8 = replacementCount > tempContent.length * 0.01;
-
-      // Check for EUC-KR meta tag
       const hasEucKrTag =
         tempContent.includes("charset=euc-kr") ||
         tempContent.includes('charset="euc-kr"') ||
@@ -449,38 +579,21 @@ function displayReportDetails(
 
       if (hasEucKrTag && isLikelyBrokenUtf8) {
         try {
-          console.log(
-            "Detected EUC-KR tag and broken UTF-8. Re-decoding as EUC-KR."
-          );
           const eucDecoder = new TextDecoder("euc-kr");
           reportContent = eucDecoder.decode(bytes);
         } catch (e) {
-          console.warn("Failed to decode as EUC-KR, falling back to UTF-8", e);
           reportContent = tempContent;
         }
       } else {
-        // It's either valid UTF-8 (regardless of tag) or we don't know what it is.
-        // If it was valid UTF-8 but had the EUC-KR tag (the lying tag case),
-        // we stick with tempContent (which is correct) and just fix the tag below.
-        if (hasEucKrTag) {
-          console.log(
-            "Detected EUC-KR tag but content appears to be valid UTF-8. Ignoring tag."
-          );
-        }
         reportContent = tempContent;
       }
 
-      // Always fix the meta tag to utf-8 if we have rendered it as such (which we have, effectively)
-      // Matches: charset=euc-kr, charset="euc-kr", charset='euc-kr'
       reportContent = reportContent.replace(
         /(charset\s*=\s*["']?)euc-kr(["']?)/gi,
         "$1utf-8$2"
       );
 
       const lowerContent = reportContent.toLowerCase();
-
-      // Improved content detection
-      // If it contains common HTML structural tags, treat it as HTML regardless of XML headers
       const hasHtmlTags =
         lowerContent.includes("<table") ||
         lowerContent.includes("<body") ||
@@ -494,100 +607,15 @@ function displayReportDetails(
         firstChars.includes("<dart-receipt");
 
       if (hasHtmlTags) {
-        // Inject Search/Filter UI and Logic
         const searchScript = `
           <style>
-            #report-search-bar {
-              position: fixed;
-              top: 0;
-              left: 0;
-              right: 0;
-              background: #f8f9fa;
-              padding: 10px;
-              border-bottom: 1px solid #ddd;
-              box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-              z-index: 10000;
-              display: flex;
-              gap: 10px;
-              align-items: center;
-              font-family: system-ui, -apple-system, sans-serif;
-            }
-            #report-search-input {
-              padding: 6px 12px;
-              border: 1px solid #ccc;
-              border-radius: 4px;
-              flex-grow: 1;
-              font-size: 14px;
-            }
-            #report-search-stats {
-              font-size: 12px;
-              color: #666;
-            }
-            body {
-              padding-top: 60px !important; /* Make space for search bar */
-            }
-            .highlight {
-              background-color: #fff3cd;
-              padding: 2px;
-            }
-            .match-row {
-              background-color: #e8f0fe;
-            }
+            #report-search-bar { position: fixed; top: 0; left: 0; right: 0; background: #f8f9fa; padding: 10px; border-bottom: 1px solid #ddd; z-index: 10000; display: flex; gap: 10px; align-items: center; font-family: system-ui; }
+            #report-search-input { padding: 6px; flex-grow: 1; border: 1px solid #ccc; border-radius: 4px; }
+            body { padding-top: 60px !important; }
+            .match-row { background-color: #e8f0fe; }
           </style>
-          <div id="report-search-bar">
-            <input type="text" id="report-search-input" placeholder="Search text to filter rows... (e.g., 'Sales', 'Revenue')">
-            <span id="report-search-stats"></span>
-          </div>
-          <script>
-            document.addEventListener('DOMContentLoaded', () => {
-              const input = document.getElementById('report-search-input');
-              const stats = document.getElementById('report-search-stats');
-              const tables = document.querySelectorAll('table');
-              let timeout = null;
-
-              input.addEventListener('input', (e) => {
-                clearTimeout(timeout);
-                timeout = setTimeout(() => {
-                  const term = e.target.value.toLowerCase();
-                  let matchCount = 0;
-                  let totalRows = 0;
-
-                  tables.forEach(table => {
-                    const rows = table.querySelectorAll('tr');
-                    
-                    rows.forEach(row => {
-                      // Skip header rows if possible (heuristic)
-                      if(row.querySelector('th')) return;
-                      
-                      totalRows++;
-                      const text = row.textContent.toLowerCase();
-                      
-                      if (term === '') {
-                        row.style.display = '';
-                        row.classList.remove('match-row');
-                      } else if (text.includes(term)) {
-                        row.style.display = '';
-                        row.classList.add('match-row');
-                        matchCount++;
-                      } else {
-                        row.style.display = 'none';
-                        row.classList.remove('match-row');
-                      }
-                    });
-                  });
-
-                  if (term !== '') {
-                    stats.textContent = \`Found \${matchCount} matches\`;
-                  } else {
-                    stats.textContent = '';
-                  }
-                }, 300);
-              });
-            });
-          </script>
+          <div id="report-search-bar"><input type="text" id="report-search-input" placeholder="Search..."></div>
         `;
-
-        // Insert before </body>, or append if not found
         if (reportContent.includes("</body>")) {
           reportContent = reportContent.replace(
             "</body>",
@@ -597,36 +625,22 @@ function displayReportDetails(
           reportContent += searchScript;
         }
 
-        // Render as HTML in iframe
-        // Use UTF-8 as we have normalized the string
         const blob = new Blob([reportContent], {
           type: "text/html; charset=utf-8",
         });
         currentObjectUrl = URL.createObjectURL(blob);
-
-        html += `<iframe 
-              src="${currentObjectUrl}" 
-              sandbox="allow-scripts"
-              style="width: 100%; height: 600px; border: 1px solid #ccc; background-color: white;"
-            ></iframe>`;
+        html += `<iframe src="${currentObjectUrl}" sandbox="allow-scripts" style="width: 100%; height: 600px; border: 1px solid #ccc; background-color: white;"></iframe>`;
         html +=
           '<p class="note" style="font-size: 0.8em; color: #666; margin-top: 5px;">Rendering as HTML.</p>';
       } else if (looksLikeXml) {
-        // Render as XML
         const blob = new Blob([reportContent], {
           type: "text/xml; charset=utf-8",
         });
         currentObjectUrl = URL.createObjectURL(blob);
-
-        html += `<iframe 
-              src="${currentObjectUrl}" 
-              sandbox="allow-scripts"
-              style="width: 100%; height: 600px; border: 1px solid #ccc; background-color: white;"
-            ></iframe>`;
+        html += `<iframe src="${currentObjectUrl}" sandbox="allow-scripts" style="width: 100%; height: 600px; border: 1px solid #ccc; background-color: white;"></iframe>`;
         html +=
           '<p class="note" style="font-size: 0.8em; color: #666; margin-top: 5px;">Rendering as XML.</p>';
       } else {
-        // Fallback to text/plain
         html += `<pre style="white-space: pre-wrap; max-height: 600px; overflow: auto;">${escapeHtml(
           reportContent
         )}</pre>`;
@@ -647,7 +661,6 @@ function displayReportDetails(
   elements.reportDetails.innerHTML = html;
   elements.results.classList.remove("hidden");
 
-  // Attach event listener to the button if it exists
   const loadBtn = document.getElementById("btn-load-raw");
   if (loadBtn) {
     loadBtn.addEventListener("click", async () => {
@@ -663,7 +676,6 @@ function displayReportDetails(
       }
     });
   }
-  // Removed Prism re-highlighting logic as we are using iframes primarily now
 }
 
 function clearReportDetails(): void {
@@ -697,8 +709,40 @@ function escapeHtml(text: string): string {
 }
 
 // Event handlers
+
+// Tab Switching
+elements.tabButtons.forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const tabName = (btn as HTMLElement).dataset.tab;
+    if (tabName === "dashboard" || tabName === "reports") {
+      state.currentTab = tabName;
+
+      // Update Buttons
+      elements.tabButtons.forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+
+      // Update Views
+      if (tabName === "dashboard") {
+        elements.dashboardView.classList.remove("hidden");
+        elements.reportsView.classList.add("hidden");
+
+        if (state.selectedCompany) {
+          fetchReports(state.selectedCompany);
+        } else {
+          state.reports = [];
+          updateUIWithReports();
+        }
+      } else {
+        elements.dashboardView.classList.add("hidden");
+        elements.reportsView.classList.remove("hidden");
+        fetchReports();
+      }
+    }
+  });
+});
+
+// Company Input (Dashboard)
 if (elements.companyInput) {
-  // Input handler for search
   elements.companyInput.addEventListener(
     "input",
     debounce((e: Event) => {
@@ -707,27 +751,48 @@ if (elements.companyInput) {
     }, 300)
   );
 
-  // Focus handler to show list
   elements.companyInput.addEventListener("focus", () => {
-    if (state.companies.length > 0) {
-      elements.companyList.classList.remove("hidden");
-    } else {
-      fetchCompanies(elements.companyInput.value);
-    }
+    elements.companyList.classList.remove("hidden");
+    if (state.companies.length === 0) fetchCompanies();
   });
 
-  // Click outside to close
+  // Click outside (Generic for both lists)
   document.addEventListener("click", (e: Event) => {
     const target = e.target as HTMLElement;
+    // Dashboard List
     if (
       !elements.companyInput.contains(target) &&
       !elements.companyList.contains(target)
     ) {
       elements.companyList.classList.add("hidden");
     }
+    // Reports List
+    if (
+      !elements.listCompanyInput.contains(target) &&
+      !elements.listCompanyList.contains(target)
+    ) {
+      elements.listCompanyList.classList.add("hidden");
+    }
   });
 }
 
+// Company Input (Reports List)
+if (elements.listCompanyInput) {
+  elements.listCompanyInput.addEventListener(
+    "input",
+    debounce((e: Event) => {
+      const target = e.target as HTMLInputElement;
+      fetchCompanies(target.value);
+    }, 300)
+  );
+
+  elements.listCompanyInput.addEventListener("focus", () => {
+    elements.listCompanyList.classList.remove("hidden");
+    if (state.companies.length === 0) fetchCompanies();
+  });
+}
+
+// Dashboard Filters
 elements.reportSelect.addEventListener("change", async (e: Event) => {
   const target = e.target as HTMLSelectElement;
   state.selectedReport = target.value || null;
@@ -763,6 +828,7 @@ elements.yearSelect.addEventListener("change", (e: Event) => {
     elements.reportSelect.value &&
     state.selectedCompany
   ) {
+    // Re-select if still valid
     const report = state.reports.find((r) => {
       const id = getFieldValue<string | number>(
         r as Record<string, unknown>,
@@ -772,9 +838,16 @@ elements.yearSelect.addEventListener("change", (e: Event) => {
       );
       return String(id) === state.selectedReport;
     });
-    if (report) {
-      displayReportDetails(report, null);
-    }
+    if (report) displayReportDetails(report, null);
+  }
+});
+
+// Report List Filters
+[elements.dateStart, elements.dateEnd, elements.sortOrder].forEach((el) => {
+  if (el) {
+    el.addEventListener("change", () => {
+      renderReportTable();
+    });
   }
 });
 
@@ -792,11 +865,8 @@ async function checkHealth(): Promise<HealthResponse> {
 // Initialize
 async function init(): Promise<void> {
   try {
-    // Check if API is available
     const health = await checkHealth();
     console.log("API health check:", health);
-
-    // Load initial data
     await fetchCompanies();
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";

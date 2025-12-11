@@ -15,41 +15,78 @@
         </header>
 
         <main>
-            <div class="filters">
-                <div class="filter-group">
-                    <label for="company-combobox-input">Company:</label>
-                    <div class="combobox-container">
-                        <input type="text" id="company-combobox-input" class="combobox-input" placeholder="Search and select company..." autocomplete="off">
-                        <ul id="company-combobox-list" class="combobox-list hidden"></ul>
+            <div class="tabs">
+                <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
+                <button class="tab-btn" data-tab="reports">Reports List</button>
+            </div>
+
+            <div id="dashboard-view" class="tab-content active">
+                <div class="filters">
+                    <div class="filter-group">
+                        <label for="company-combobox-input">Company:</label>
+                        <div class="combobox-container">
+                            <input type="text" id="company-combobox-input" class="combobox-input" placeholder="Search and select company..." autocomplete="off">
+                            <ul id="company-combobox-list" class="combobox-list hidden"></ul>
+                        </div>
+                    </div>
+
+                    <div class="filter-group">
+                        <label for="report-select">Report:</label>
+                        <select id="report-select" disabled>
+                            <option value="">Select a company first</option>
+                        </select>
+                    </div>
+
+                    <div class="filter-group">
+                        <label for="year-select">Year:</label>
+                        <select id="year-select">
+                            <option value="">All Years</option>
+                        </select>
                     </div>
                 </div>
 
-                <div class="filter-group">
-                    <label for="report-select">Report:</label>
-                    <select id="report-select" disabled>
-                        <option value="">Select a company first</option>
-                    </select>
-                </div>
+                <div class="content">
+                    <div id="loading" class="loading hidden">
+                        <div class="spinner"></div>
+                        <p>Loading data...</p>
+                    </div>
 
-                <div class="filter-group">
-                    <label for="year-select">Year:</label>
-                    <select id="year-select">
-                        <option value="">All Years</option>
-                    </select>
+                    <div id="error" class="error hidden"></div>
+
+                    <div id="results" class="results hidden">
+                        <h2>Report Details</h2>
+                        <div id="report-details"></div>
+                    </div>
                 </div>
             </div>
 
-            <div class="content">
-                <div id="loading" class="loading hidden">
-                    <div class="spinner"></div>
-                    <p>Loading data...</p>
+            <div id="reports-view" class="tab-content hidden">
+                <div class="filters">
+                    <div class="filter-group">
+                        <label for="list-company-input">Company:</label>
+                        <div class="combobox-container">
+                            <input type="text" id="list-company-input" class="combobox-input" placeholder="Search company..." autocomplete="off">
+                            <ul id="list-company-list" class="combobox-list hidden"></ul>
+                        </div>
+                    </div>
+                    <div class="filter-group">
+                        <label for="date-start">Start Date:</label>
+                        <input type="date" id="date-start" class="date-input">
+                    </div>
+                    <div class="filter-group">
+                        <label for="date-end">End Date:</label>
+                        <input type="date" id="date-end" class="date-input">
+                    </div>
+                    <div class="filter-group">
+                        <label for="sort-order">Sort:</label>
+                        <select id="sort-order">
+                            <option value="desc">Newest First</option>
+                            <option value="asc">Oldest First</option>
+                        </select>
+                    </div>
                 </div>
-
-                <div id="error" class="error hidden"></div>
-
-                <div id="results" class="results hidden">
-                    <h2>Report Details</h2>
-                    <div id="report-details"></div>
+                <div id="report-list-container" class="results">
+                    <div class="empty-state">Select a company to view reports</div>
                 </div>
             </div>
         </main>

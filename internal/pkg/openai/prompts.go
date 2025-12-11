@@ -1,10 +1,7 @@
 package openai
 
 const (
-	systemPrompt = `너의 임무는 한국 DART 공시 원문에서 숫자/사실을 추출해
-		정해진 JSON 스키마로만 출력하는 것이다.
-		추론은 최소화하고, 문서에 명시된 값만 사용하라.
-		출력은 반드시 유효한 JSON 한개만 반환. 설명문 금지.`
+	systemPrompt = `너의 임무는 한국 DART 공시 원문에서 숫자/사실을 추출해 정해진 JSON 스키마로만 출력하는 것이다. 추론은 최소화하고, 문서에 명시된 값만 사용하라. 공시 내 중복된 숫자/문장은 제거하되, 표기된 숫자들은 가능한 모두 누락 없이 표시하라. 출력은 반드시 유효한 JSON 한 개만 반환하라. 설명문 금지.`
 
 	// Securities Issuance Terms
 	securitiesIssuanceTermsSchema = `
@@ -206,11 +203,31 @@ const (
 	스키마 필드: {
 		company_name: string,
 		date: string (YYYY-MM-DD),
-		type: string,
+		type: string (예: '사업보고서', '분기보고서' 등, 명확히 명시되어 있지 않으면 빈 문자열 사용),
 		summary: string,
-		related_companies: []string,
-		schema_suggestion: string,
-	}`
+		related_companies: [string] (연관된 회사 이름 배열, 없을 경우 빈 배열 []),
+		schema_suggestion: string (추출된 데이터에 적합한 JSON 스키마 예시, 아래 Output Format 참고)
+	}
+	## Output Format
+		- 항상 아래의 필드명 및 순서(company_name, date, type, summary, related_companies, schema_suggestion)에 맞추어 유효한 JSON 오브젝트 하나만 출력.
+		- 문서에 값이 부재/불분명하면 해당 필드는 빈 문자열("") 또는 빈 배열([])로 출력.
+		- schema_suggestion 필드는 위에 제시된 스키마를 그대로 문자열로 입력.
+		- 불완전/오류 입력 데이터도 동일한 규칙을 적용해 출력.
+	예시:
+	{
+		"company_name": "삼성전자",
+		"date": "2023-09-30",
+		"type": "사업보고서",
+		"summary": "2023년 3분기에 매출이 10% 증가하였음.",
+		"related_companies": ["삼성디스플레이"],
+		"schema_suggestion": "{company_name: string, date: string (YYYY-MM-DD), type: string, summary: string, related_companies: [string], schema_suggestion: string}"
+	}
+	## Output Verbosity
+	- 반드시 출력은 1개의 JSON 오브젝트만 반환할 것.
+	- 어떤 중간 설명, 변명, 인사말도 추가하지 말 것.
+	- 정해진 필드만 사용하고 예시보다 길거나 추가 정보 없이 1줄씩 간결하게 작성할 것. (2문장 이하 요약)
+	- 완결성 우선: 값이 부족해도 누락 없이 모든 필드 채우기. 답변은 늘 위 JSON 스키마에 맞춰 완전하게 채우는 것이 언어의 간결함보다 우선됨.`
+
 	defaultAdditionalSchema = `
 	- 회사명, 날짜, 유형, 요약은 문서 상단에서 확인합니다.
 	- 요약은 문서 내용을 요약한 문자열로 추출합니다.
@@ -218,6 +235,5 @@ const (
 	- 날짜는 문서 날짜를 추출합니다.
 	- 회사명은 문서 회사명을 추출합니다.
 	- 관련 회사는 문서 내용에서 관련 회사를 추출합니다.
-	- 해당 문서에 맞는 JSON 스키마를 제안합니다.
-	`
+	- 해당 문서에 맞는 JSON 스키마를 제안합니다.`
 )

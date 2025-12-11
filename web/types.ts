@@ -75,10 +75,17 @@ export interface AppState {
   selectedYear: string | null;
   loading: boolean;
   error: string | null;
+  currentTab: 'dashboard' | 'reports';
 }
 
 // DOM Elements Type
 export interface DOMElements {
+  // Tabs
+  tabButtons: NodeListOf<Element>;
+  dashboardView: HTMLElement;
+  reportsView: HTMLElement;
+  
+  // Dashboard Elements
   companyInput: HTMLInputElement;
   companyList: HTMLUListElement;
   reportSelect: HTMLSelectElement;
@@ -87,6 +94,14 @@ export interface DOMElements {
   error: HTMLElement;
   results: HTMLElement;
   reportDetails: HTMLElement;
+
+  // Report List Elements
+  listCompanyInput: HTMLInputElement;
+  listCompanyList: HTMLUListElement;
+  dateStart: HTMLInputElement;
+  dateEnd: HTMLInputElement;
+  sortOrder: HTMLSelectElement;
+  reportListContainer: HTMLElement;
 }
 
 // Request Options

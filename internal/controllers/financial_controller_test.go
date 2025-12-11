@@ -239,6 +239,88 @@ var _ = Describe("FinancialController", func() {
 		})
 	})
 
+	FDescribe("GET /api/v1/reports", func() {
+		var (
+			rawReportA models.RawReport
+			rawReportB models.RawReport
+		)
+
+		BeforeEach(func() {
+			ctx := context.Background()
+
+			companyA := models.Company{
+				CorpCode: "10000001",
+				CorpName: "Company A",
+			}
+			createCompany(dbConn, ctx, &companyA)
+
+			companyB := models.Company{
+				CorpCode: "10000002",
+				CorpName: "Company B",
+			}
+			createCompany(dbConn, ctx, &companyB)
+
+			rawReportA = models.RawReport{
+				ReceiptNumber: "20251123000001",
+				ReportName:    "Report A",
+				CorpCode:      "10000001",
+				BlobData:      []byte("doc1"),
+				BlobSize:      4,
+				JSONData:      json.RawMessage(`{"a":1}`),
+			}
+			createRawReport(dbConn, ctx, &rawReportA)
+
+			rawReportB = models.RawReport{
+				ReceiptNumber: "20251123000002",
+				ReportName:    "Report B",
+				CorpCode:      "10000002",
+				BlobData:      []byte("doc2"),
+				BlobSize:      4,
+				JSONData:      json.RawMessage(`{"b":2}`),
+			}
+			createRawReport(dbConn, ctx, &rawReportB)
+
+			analysisA := models.Analysis{
+				RawReportID: rawReportA.ID,
+				Analysis:    json.RawMessage(`{"summary":"a"}`),
+			}
+			createAnalysis(dbConn, ctx, &analysisA)
+
+			analysisB := models.Analysis{
+				RawReportID: rawReportB.ID,
+				Analysis:    json.RawMessage(`{"summary":"b"}`),
+			}
+			createAnalysis(dbConn, ctx, &analysisB)
+		})
+
+		It("returns all reports", func() {
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/reports", nil)
+			resp := httptest.NewRecorder()
+
+			router.ServeHTTP(resp, req)
+
+			Expect(resp.Code).To(Equal(http.StatusOK))
+			Expect(resp.Body.String()).To(MatchJSON(`{
+				"reports": [
+					{
+						"corp_code": "10000002",
+						"report_name": "Report B",
+						"raw_report_id": 2,
+						"receipt_number": "20251123000002",
+						"analysis": {"summary": "b"}
+					},
+					{
+						"corp_code": "10000001",
+						"report_name": "Report A",
+						"raw_report_id": 1,
+						"receipt_number": "20251123000001",
+						"analysis": {"summary": "a"}
+					}
+				]
+			}`))
+		})
+	})
+
 	Describe("GET /api/v1/reports/:corp_code/:raw_report_id", func() {
 		It("returns raw report for the given corp code and raw report id", func() {
 			rawReportA := models.RawReport{

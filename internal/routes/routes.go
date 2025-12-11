@@ -44,11 +44,14 @@ func SetupRouter(db *gorm.DB, cfg *config.Config) *gin.Engine {
 		// MCP-friendly endpoints
 		api.GET("/mcp/reports/by-corp-name", financialController.GetReportsByCorpName)
 
-		// Reports endpoints
-		api.GET("/reports/:corp_code", financialController.GetReports)
+		// Reports by corp code endpoints
+		api.GET("/reports/:corp_code", financialController.GetReportsByCorpCode)
 
 		// Raw reports endpoints
 		api.GET("/reports/:corp_code/:raw_report_id", financialController.GetRawReport)
+
+		// Reports endpoints
+		api.GET("/reports", financialController.GetAllReports)
 	}
 
 	return router

@@ -7,6 +7,7 @@ import (
 	"kosis/internal/config"
 	"kosis/internal/db"
 	"kosis/internal/models"
+	"kosis/internal/pkg/openai"
 	"kosis/internal/tasks"
 	"kosis/internal/testhelpers"
 	"strings"
@@ -179,6 +180,7 @@ var _ = Describe("HandleFetchReportsTask", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(result.ReceiptNumber).To(Equal("20251114001374"))
 		Expect(result.CorpCode).To(Equal("00356361"))
+		Expect(result.ReportName).To(Equal("분기보고서 (2025.09)"))
 		Expect(strings.TrimSpace(string(result.BlobData))).To(Equal(strings.TrimSpace(testDocument)))
 		Expect(result.JSONData).To(MatchJSON(`{"company_name": "ACME Corp", "report_title": "Form 10-K", "company_cik": "00001234", "tables": [[["Metric", "Amount"], ["Revenue", "1000"], ["Profit", "500"]], [["Line Item", "Value"], ["Total Assets", "2000"]]], "key_paragraphs": ["Primary discussion.", "Secondary paragraph"]}`))
 
@@ -281,4 +283,117 @@ var _ = Describe("HandleFetchReportsTask", func() {
 		Entry("invalid API key", errRes2),
 		Entry("invalid corp code", errRes3),
 	)
+})
+
+var _ = Describe("AnalyzeReportBatch", func() {
+	BeforeEach(func() {
+		testhelpers.Activate()
+	})
+
+	AfterEach(func() {
+		testhelpers.Deactivate()
+	})
+
+	It("parses batch output without truncation", func() {
+		analyzer := openai.NewFileAnalyzer("dummy-key")
+		openaiResFmtBatch := `{
+  "id": "resp_67ccd2bed1ec8190b14f964abc0542670bb6a6b452d3795b",
+  "object": "response",
+  "created_at": 1741476542,
+  "status": "completed",
+  "error": null,
+  "incomplete_details": null,
+  "instructions": null,
+  "max_output_tokens": null,
+  "model": "gpt-4.1-2025-04-14",
+  "output": [
+    {
+      "type": "message",
+      "id": "msg_67ccd2bf17f0819081ff3bb2cf6508e60bb6a6b452d3795b",
+      "status": "completed",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "output_text",
+      		"text": "%s",
+      		"annotations": []
+        }
+      ]
+    }
+  ],
+  "parallel_tool_calls": true,
+  "previous_response_id": null,
+  "reasoning": {
+    "effort": null,
+    "summary": null
+  },
+  "store": true,
+  "temperature": 1.0,
+  "text": {
+    "format": {
+      "type": "text"
+    }
+  },
+  "tool_choice": "auto",
+  "tools": [],
+  "top_p": 1.0,
+  "truncation": "disabled",
+  "usage": {
+    "input_tokens": 36,
+    "input_tokens_details": {
+      "cached_tokens": 0
+    },
+    "output_tokens": 87,
+    "output_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "total_tokens": 123
+  },
+  "user": null,
+  "metadata": {}
+}`
+
+		// Mock file upload for batch input
+		testhelpers.New("https://api.openai.com").
+			Post("/v1/files").
+			Reply(200).
+			BodyString(`{"id":"file-123","bytes":10,"created_at":1,"filename":"batch.jsonl","object":"file","purpose":"batch","status":"processed"}`).
+			Header("Content-Type", "application/json")
+
+		// Mock batch creation
+		testhelpers.New("https://api.openai.com").
+			Post("/v1/batches").
+			Reply(200).
+			BodyString(`{"id":"batch-123","completion_window":"24h","created_at":1,"endpoint":"/v1/responses","input_file_id":"file-123","object":"batch","status":"validating"}`).
+			Header("Content-Type", "application/json")
+
+		// Mock batch polling to completed state
+		testhelpers.New("https://api.openai.com").
+			Get("/v1/batches/batch-123").
+			Reply(200).
+			BodyString(`{"id":"batch-123","completion_window":"24h","created_at":1,"endpoint":"/v1/responses","input_file_id":"file-123","object":"batch","status":"completed","output_file_id":"file-out-123"}`).
+			Header("Content-Type", "application/json")
+
+		rawData := `{ \"company_name\": \"ACME\", \"period_end_date\": \"2025-09-30\", \"period_start_date\": \"2025-07-01\", \"submission_date\": \"2025-11-14\" }`
+		batchResponse := fmt.Sprintf(strings.ReplaceAll(openaiResFmtBatch, "\n", ""), rawData)
+		batchOutputLine := fmt.Sprintf(`{"custom_id":"report-1","response":{"status_code":200,"body":%s}}`, batchResponse)
+
+		testhelpers.New("https://api.openai.com").
+			Get("/v1/files/file-out-123/content").
+			Reply(200).
+			BodyString(batchOutputLine+"\n").
+			Header("Content-Type", "application/x-ndjson")
+
+		ctx := context.Background()
+		result, tokens, err := analyzer.AnalyzeReportBatch(ctx, strings.Repeat("X", 130000), "report")
+		Expect(err).NotTo(HaveOccurred())
+
+		report, ok := result.(*openai.Report)
+		Expect(ok).To(BeTrue())
+		Expect(report.CompanyName).To(Equal("ACME"))
+		Expect(report.PeriodEnd).To(Equal("2025-09-30"))
+		Expect(report.PeriodStart).To(Equal("2025-07-01"))
+		Expect(report.SubmissionDate).To(Equal("2025-11-14"))
+		Expect(tokens).To(Equal(int64(123)))
+	})
 })
