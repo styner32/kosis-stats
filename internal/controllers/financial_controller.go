@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -33,6 +34,8 @@ type ReportResponse struct {
 	ReportName    string          `json:"report_name"`
 	RawReportID   uint            `json:"raw_report_id"`
 	ReceiptNumber string          `json:"receipt_number"`
+	ReceiptDate   string          `json:"receipt_date"`
+	ReportType    string          `json:"report_type"`
 	Analysis      json.RawMessage `json:"analysis"`
 }
 
@@ -179,24 +182,71 @@ func (fc *FinancialController) GetReportsByCorpName(c *gin.Context) {
 // - date: order the reports by the given date
 func (fc *FinancialController) GetAllReports(c *gin.Context) {
 	limit := getLimitWithDefault(c, 10)
+	corpCode := c.Query("corp_code")
+	startDate := c.Query("start_date")
+	endDate := c.Query("end_date")
 
 	var reports []ReportResponse
-	err := fc.DB.
+	scope := fc.DB.
 		Model(&models.Analysis{}).
 		Select("analyses.raw_report_id, raw_reports.receipt_number, raw_reports.corp_code, companies.corp_name, raw_reports.report_name, analyses.analysis").
 		Joins("JOIN raw_reports ON analyses.raw_report_id = raw_reports.id").
 		Joins("JOIN companies ON companies.corp_code = raw_reports.corp_code").
-		Order("raw_reports.receipt_number DESC").
-		Limit(limit).
-		Scan(&reports).Error
+		Order("raw_reports.receipt_number DESC")
 
+	if corpCode != "" {
+		scope = scope.Where("companies.corp_code = ?", corpCode)
+	}
+
+	if startDate != "" {
+		d, err := time.Parse("2006-01-02", startDate)
+		if err != nil {
+			log.Printf("[WARN] failed to parse start date: %v", err)
+		} else {
+			scope = scope.Where("SUBSTRING(raw_reports.receipt_number, 1, 8) >= ?", d.Format("20060102"))
+		}
+	}
+
+	if endDate != "" {
+		d, err := time.Parse("2006-01-02", endDate)
+		if err != nil {
+			log.Printf("[WARN] failed to parse end date: %v", err)
+		} else {
+			scope = scope.Where("SUBSTRING(raw_reports.receipt_number, 1, 8) < ?", d.Format("20060102"))
+		}
+	}
+
+	err := scope.Limit(limit).Scan(&reports).Error
 	if err != nil {
 		log.Printf("failed to get all reports: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Something went wrong"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"reports": reports})
+	res := []ReportResponse{}
+	for _, report := range reports {
+		receiptDateStr := report.ReceiptNumber[:8] // YYYYMMDD
+		receiptDate, err := time.Parse("20060102", receiptDateStr)
+		if err != nil {
+			log.Printf("failed to parse receipt date: %v", err)
+			continue
+		}
+
+		reportType := report.ReceiptNumber[8:9]
+
+		res = append(res, ReportResponse{
+			CorpName:      report.CorpName,
+			CorpCode:      report.CorpCode,
+			ReportName:    report.ReportName,
+			RawReportID:   report.RawReportID,
+			ReceiptNumber: report.ReceiptNumber,
+			Analysis:      report.Analysis,
+			ReceiptDate:   receiptDate.Format("2006-01-02"),
+			ReportType:    reportType,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{"reports": res})
 }
 
 func getLimitWithDefault(c *gin.Context, defaultValue int) int {

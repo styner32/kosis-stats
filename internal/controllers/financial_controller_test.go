@@ -239,7 +239,7 @@ var _ = Describe("FinancialController", func() {
 		})
 	})
 
-	FDescribe("GET /api/v1/reports", func() {
+	Describe("GET /api/v1/reports", func() {
 		var (
 			rawReportA models.RawReport
 			rawReportB models.RawReport
@@ -250,13 +250,13 @@ var _ = Describe("FinancialController", func() {
 
 			companyA := models.Company{
 				CorpCode: "10000001",
-				CorpName: "Company A",
+				CorpName: "A 회사",
 			}
 			createCompany(dbConn, ctx, &companyA)
 
 			companyB := models.Company{
 				CorpCode: "10000002",
-				CorpName: "Company B",
+				CorpName: "B 회사",
 			}
 			createCompany(dbConn, ctx, &companyB)
 
@@ -271,7 +271,7 @@ var _ = Describe("FinancialController", func() {
 			createRawReport(dbConn, ctx, &rawReportA)
 
 			rawReportB = models.RawReport{
-				ReceiptNumber: "20251123000002",
+				ReceiptNumber: "20251124900002",
 				ReportName:    "Report B",
 				CorpCode:      "10000002",
 				BlobData:      []byte("doc2"),
@@ -303,19 +303,67 @@ var _ = Describe("FinancialController", func() {
 			Expect(resp.Body.String()).To(MatchJSON(`{
 				"reports": [
 					{
-						"corp_name": "Company B",
+						"corp_name": "B 회사",
 						"corp_code": "10000002",
 						"report_name": "Report B",
 						"raw_report_id": 2,
-						"receipt_number": "20251123000002",
+						"receipt_number": "20251124900002",
+						"receipt_date": "2025-11-24",
+						"report_type": "9",
 						"analysis": {"summary": "b"}
 					},
 					{
-						"corp_name": "Company A",
+						"corp_name": "A 회사",
 						"corp_code": "10000001",
 						"report_name": "Report A",
 						"raw_report_id": 1,
 						"receipt_number": "20251123000001",
+						"receipt_date": "2025-11-23",
+						"report_type": "0",
+						"analysis": {"summary": "a"}
+					}
+				]
+			}`))
+		})
+
+		It("filters reports by corp name", func() {
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/reports?corp_code=10000001", nil)
+			resp := httptest.NewRecorder()
+
+			router.ServeHTTP(resp, req)
+			Expect(resp.Code).To(Equal(http.StatusOK))
+			Expect(resp.Body.String()).To(MatchJSON(`{
+				"reports": [
+					{
+						"corp_name": "A 회사",
+						"corp_code": "10000001",
+						"report_name": "Report A",
+						"raw_report_id": 1,
+						"receipt_number": "20251123000001",
+						"receipt_date": "2025-11-23",
+						"report_type": "0",
+						"analysis": {"summary": "a"}
+					}
+				]
+			}`))
+		})
+
+		It("filters reports by date", func() {
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/reports?start_date=2025-11-23&end_date=2025-11-24", nil)
+			resp := httptest.NewRecorder()
+
+			router.ServeHTTP(resp, req)
+			Expect(resp.Code).To(Equal(http.StatusOK))
+			Expect(resp.Body.String()).To(MatchJSON(`{
+				"reports": [
+					{
+						"corp_name": "A 회사",
+						"corp_code": "10000001",
+						"report_name": "Report A",
+						"raw_report_id": 1,
+						"receipt_number": "20251123000001",
+						"receipt_date": "2025-11-23",
+						"report_type": "0",
 						"analysis": {"summary": "a"}
 					}
 				]
