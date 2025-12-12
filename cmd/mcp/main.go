@@ -86,6 +86,11 @@ type MCPServer struct {
 	out     *bufio.Writer
 	outMu   sync.Mutex
 	tools   []Tool
+
+	shutdownCh   chan struct{}
+	shutdownOnce sync.Once
+	inCloser     io.Closer
+	wg           sync.WaitGroup
 }
 
 func main() {
@@ -122,6 +127,8 @@ func main() {
 				},
 			},
 		},
+		shutdownCh: make(chan struct{}),
+		inCloser:   os.Stdin,
 	}
 
 	log.Println("MCP Shim Server starting...")
@@ -132,10 +139,17 @@ func main() {
 
 // Serve starts the read/dispatch/write loop.
 func (s *MCPServer) Serve() error {
+	defer s.wg.Wait()
 	for {
+		if s.shuttingDown() {
+			return nil
+		}
 		req, err := s.readMessage()
 		if err != nil {
 			if err == io.EOF {
+				return nil
+			}
+			if s.shuttingDown() {
 				return nil
 			}
 			// 파싱 에러나 빈 줄은 로그만 남기고 계속 진행
@@ -150,7 +164,9 @@ func (s *MCPServer) Serve() error {
 		// 다만 응답은 보내지 않음.
 
 		// Handle request concurrently
+		s.wg.Add(1)
 		go func(r Request) {
+			defer s.wg.Done()
 			resp := s.handleRequest(r)
 
 			// 응답이 nil이면(예: Notification) 아무것도 보내지 않음
@@ -162,6 +178,25 @@ func (s *MCPServer) Serve() error {
 				log.Printf("failed to write message: %v", err)
 			}
 		}(req)
+	}
+}
+
+func (s *MCPServer) requestShutdown() {
+	s.shutdownOnce.Do(func() {
+		close(s.shutdownCh)
+		if s.inCloser != nil {
+			// Close stdin to unblock readMessage.
+			_ = s.inCloser.Close()
+		}
+	})
+}
+
+func (s *MCPServer) shuttingDown() bool {
+	select {
+	case <-s.shutdownCh:
+		return true
+	default:
+		return false
 	}
 }
 
@@ -191,13 +226,10 @@ func (s *MCPServer) handleRequest(req Request) *Response {
 	case "ping":
 		return s.reply(req, map[string]interface{}{})
 	case "shutdown":
-		go func() {
-			time.Sleep(500 * time.Millisecond)
-			os.Exit(0)
-		}()
+		s.requestShutdown()
 		return s.reply(req, nil)
 	case "notifications/exit":
-		os.Exit(0)
+		s.requestShutdown()
 		return nil
 	}
 

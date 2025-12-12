@@ -13,7 +13,6 @@ export function ReportsList() {
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
 
   // Expanded Row State
   const [expandedRowIndex, setExpandedRowIndex] = useState<number | null>(null);
@@ -36,6 +35,14 @@ export function ReportsList() {
         }
       }
 
+      if (startDate) {
+        endpoint += `&start_date=${startDate}`;
+      }
+
+      if (endDate) {
+        endpoint += `&end_date=${endDate}`;
+      }
+
       const data = await apiRequest<
         { reports: AnalysisRecord[] } | AnalysisRecord[]
       >(endpoint);
@@ -51,39 +58,7 @@ export function ReportsList() {
     fetchAll();
     // Reset expansion on refetch
     setExpandedRowIndex(null);
-  }, [selectedCompany]);
-
-  // Client-side Filtering & Sorting
-  const processedReports = reports
-    .filter((r) => {
-      const d = getFieldValue<string>(
-        r as unknown as Record<string, unknown>,
-        "created_at"
-      );
-      if (!d) return true; // Keep if no date? Or filter out? Legacy kept them unless range specified.
-      const date = new Date(d);
-
-      if (startDate && date < new Date(startDate)) return false;
-      if (endDate) {
-        const e = new Date(endDate);
-        e.setHours(23, 59, 59);
-        if (date > e) return false;
-      }
-      return true;
-    })
-    .sort((a, b) => {
-      const d1 = getFieldValue<string>(
-        a as unknown as Record<string, unknown>,
-        "created_at"
-      );
-      const d2 = getFieldValue<string>(
-        b as unknown as Record<string, unknown>,
-        "created_at"
-      );
-      if (!d1) return 1;
-      if (!d2) return -1;
-      return sortOrder === "asc" ? d1.localeCompare(d2) : d2.localeCompare(d1);
-    });
+  }, [selectedCompany, startDate, endDate]);
 
   const toggleRow = (index: number) => {
     setExpandedRowIndex(expandedRowIndex === index ? null : index);
@@ -116,16 +91,6 @@ export function ReportsList() {
             onChange={(e) => setEndDate(e.target.value)}
           />
         </div>
-        <div className="filter-group">
-          <label>Sort:</label>
-          <select
-            value={sortOrder}
-            onChange={(e) => setSortOrder(e.target.value as "asc" | "desc")}
-          >
-            <option value="desc">Newest First</option>
-            <option value="asc">Oldest First</option>
-          </select>
-        </div>
       </div>
 
       <div className="results">
@@ -133,7 +98,7 @@ export function ReportsList() {
           <div className="loading">
             <div className="spinner"></div>Loading...
           </div>
-        ) : processedReports.length === 0 ? (
+        ) : reports.length === 0 ? (
           <div className="empty-state">No matching reports</div>
         ) : (
           <table className="data-table">
@@ -147,7 +112,7 @@ export function ReportsList() {
               </tr>
             </thead>
             <tbody>
-              {processedReports.map((r, i) => {
+              {reports.map((r, i) => {
                 const code =
                   getFieldValue<string>(
                     r as unknown as Record<string, unknown>,

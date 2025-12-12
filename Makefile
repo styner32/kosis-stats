@@ -17,9 +17,6 @@ run-worker: ## Run the worker: go run
 run-web: ## Run the web server: npm run serve
 	cd web && npm run dev
 
-run-web-serve: ## Run the web server: npm run serve
-	cd web && npm run serve
-
 build-mcp: ## Build the MCP server
 	go build -o bin/kosis-mcp $(CMD_DIR)/mcp/main.go
 

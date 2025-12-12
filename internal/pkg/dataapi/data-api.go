@@ -2,6 +2,7 @@ package dataapi
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -90,6 +91,10 @@ func (c *DataAPIClient) GetStockPrice(name string) (interface{}, error) {
 	}
 
 	log.Printf("stockPriceResponse: %+v", stockPriceResponse)
+
+	if stockPriceResponse.Response.Body.Items.Item == nil {
+		return nil, fmt.Errorf("no stock price found")
+	}
 
 	return stockPriceResponse.Response.Body.Items.Item[0], nil
 }

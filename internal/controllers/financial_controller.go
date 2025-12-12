@@ -45,16 +45,8 @@ func (fc *FinancialController) GetCompanies(c *gin.Context) {
 	limit := getLimitWithDefault(c, 100)
 	search := c.Query("search")
 
-	corpCodes := []string{}
-	err := fc.DB.Model(&models.RawReport{}).Distinct("corp_code").Pluck("corp_code", &corpCodes).Error
-	if err != nil {
-		log.Printf("failed to get raw reports: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Something went wrong"})
-		return
-	}
-
 	// show companies that has at least one raw report
-	query := gorm.G[models.Company](fc.DB).Where("category <> ?", "E").Where("corp_code IN (?)", corpCodes)
+	query := gorm.G[models.Company](fc.DB).Where("category <> ?", "E").Where("EXISTS (SELECT 1 FROM raw_reports WHERE raw_reports.corp_code = companies.corp_code)")
 
 	if search != "" {
 		// Use ILIKE for case-insensitive search, supported by pg_trgm indexes
@@ -203,7 +195,7 @@ func (fc *FinancialController) GetAllReports(c *gin.Context) {
 		if err != nil {
 			log.Printf("[WARN] failed to parse start date: %v", err)
 		} else {
-			scope = scope.Where("SUBSTRING(raw_reports.receipt_number, 1, 8) >= ?", d.Format("20060102"))
+			scope = scope.Where("raw_reports.receipt_number >= ?", d.Format("20060102"))
 		}
 	}
 
@@ -212,7 +204,7 @@ func (fc *FinancialController) GetAllReports(c *gin.Context) {
 		if err != nil {
 			log.Printf("[WARN] failed to parse end date: %v", err)
 		} else {
-			scope = scope.Where("SUBSTRING(raw_reports.receipt_number, 1, 8) < ?", d.Format("20060102"))
+			scope = scope.Where("raw_reports.receipt_number < ?", d.Format("20060102"))
 		}
 	}
 
@@ -225,6 +217,11 @@ func (fc *FinancialController) GetAllReports(c *gin.Context) {
 
 	res := []ReportResponse{}
 	for _, report := range reports {
+		if len(report.ReceiptNumber) < 14 { // 8 digits for date + 1 digit for type + 5 digits for number
+			log.Printf("invalid receipt number: %s", report.ReceiptNumber)
+			continue
+		}
+
 		receiptDateStr := report.ReceiptNumber[:8] // YYYYMMDD
 		receiptDate, err := time.Parse("20060102", receiptDateStr)
 		if err != nil {
