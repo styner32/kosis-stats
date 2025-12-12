@@ -21,13 +21,13 @@ echo ""
 
 # Try different methods to start a server
 if command -v python3 &> /dev/null; then
-    python3 -m http.server $PORT
+    python3 -m http.server $PORT --directory dist
 elif command -v python &> /dev/null; then
-    python -m SimpleHTTPServer $PORT
+    # Python 2 SimpleHTTPServer doesn't support --directory easily, cd in subshell
+    (cd dist && python -m SimpleHTTPServer $PORT)
 elif command -v php &> /dev/null; then
-    php -S localhost:$PORT
+    php -S localhost:$PORT -t dist
 else
     echo "No suitable server found. Please install Python or PHP, or use a different HTTP server."
     exit 1
 fi
-
