@@ -55,6 +55,12 @@ To execute the test suite:
 make test
 ```
 
+To verify the MCP server is running:
+
+```bash
+npx @modelcontextprotocol/inspector ./bin/kosis-mcp
+```
+
 ## Database Migrations
 
 Ensure your `DATABASE_URL` environment variable is set before running migrations.

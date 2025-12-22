@@ -1,11 +1,9 @@
 package main
 
 import (
-	"context"
-	"encoding/json"
-	"fmt"
-	"kosis/internal/pkg/dart"
-	"kosis/internal/pkg/openai"
+	"kosis/internal/pkg/binance"
+	"kosis/internal/pkg/dataapi"
+	"kosis/internal/pkg/fred"
 	"log"
 	"os"
 
@@ -23,6 +21,21 @@ func main() {
 		log.Fatal("DART_API_KEY is not set")
 	}
 
+	dataApiKey := os.Getenv("DATA_API_KEY")
+	if dataApiKey == "" {
+		log.Fatal("DATA_API_KEY is not set")
+	}
+
+	openaiApiKey := os.Getenv("OPENAI_API_KEY")
+	if openaiApiKey == "" {
+		log.Fatal("OPENAI_API_KEY is not set")
+	}
+
+	fredApiKey := os.Getenv("FRED_API_KEY")
+	if fredApiKey == "" {
+		log.Fatal("FRED_API_KEY is not set")
+	}
+
 	// kosisClient := kosis.New(apiKey)
 	// if err := kosisClient.Search(); err != nil {
 	// 	log.Fatalf("Failed to search KOSIS: %v", err)
@@ -34,50 +47,23 @@ func main() {
 	// 	log.Fatalf("Failed to get raw reports: %v", err)
 	// }
 
-	// data/receipts/01942952/20251015000221.html
-	// 20251015000218.xml
-	// data/receipts/01035942/20251015000213.html
-	// data/receipts/01878037/20251015000214.html
-	// data/receipts/01136001/20251015900291.html
-	// data/receipts/00127875/20251031000217.html
-	// data/receipts/00977377/20251031000579.html
-	// data/receipts/01960949/20251030000572.html
-	// data/receipts/00485177/20251031900992.html // 일진파워, 단일판매ㆍ공급계약체결
-	// data/receipts/01515323/20250814001590.html // LG에너지솔루션, 반기보고서 (2025.06)
-	// data/receipts/00126380/20250515001922.html // 삼성전자, 반기보고서 (2025.03)
-	analyzeCorrectionReport("data/receipts/00126380/", "20250515001922")
-}
-
-func analyzeCorrectionReport(folderName string, reportNumber string) {
-	fileName := fmt.Sprintf("%s/%s.html", folderName, reportNumber)
-	file, err := os.ReadFile(fileName)
+	rsi, err := binance.GetCryptoRSI("APT")
 	if err != nil {
-		log.Fatalf("Failed to read file: %v", err)
+		log.Fatalf("Failed to get RSI: %v", err)
 	}
+	log.Printf("RSI: %f", rsi)
 
-	if err := dart.StoreFiles(file, reportNumber); err != nil {
-		log.Fatalf("Failed to store files: %v", err)
-	}
-
-	compactFolder := fmt.Sprintf("data/compact/%s", reportNumber)
-	compactFilename := fmt.Sprintf("%s/%s.json", compactFolder, reportNumber)
-
-	fa, err := openai.NewFileAnalyzerFromEnv()
+	fredClient := fred.New(fredApiKey)
+	highYieldSpread, err := fredClient.GetHighYieldSpread()
 	if err != nil {
-		log.Fatalf("Failed to create file analyzer: %v", err)
+		log.Fatalf("Failed to get high yield spread: %v", err)
 	}
+	log.Printf("High yield spread: %+v", highYieldSpread)
 
-	answer, err := fa.AnalyzeFile(context.Background(), compactFilename, "report")
+	dataapiClient := dataapi.New(dataApiKey)
+	stockPrice, err := dataapiClient.GetStockPrice("삼성전자")
 	if err != nil {
-		log.Fatalf("Failed to analyze file: %v", err)
+		log.Fatalf("Failed to get stock price: %v", err)
 	}
-
-	fmt.Printf("Answer Raw: %+v\n", answer)
-
-	answerJSON, err := json.MarshalIndent(answer, "", "  ")
-	if err != nil {
-		log.Fatalf("Failed to marshal answer: %v", err)
-	}
-
-	fmt.Printf("Answer: %s\n", string(answerJSON))
+	log.Printf("stockPrice: %+v", stockPrice)
 }

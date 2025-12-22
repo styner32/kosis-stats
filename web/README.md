@@ -1,14 +1,14 @@
-# KOSIS Stats Frontend
+# KOSIS Stats Frontend (React)
 
-A TypeScript-based Single Page Application (SPA) for viewing financial reports from the KOSIS Stats backend.
+A React-based Single Page Application (SPA) for viewing financial reports from the KOSIS Stats backend.
+Migrated from vanilla TypeScript to React + Vite.
 
 ## Features
 
-- **Company Selection**: Browse and select companies from the database
-- **Report Filtering**: Filter reports by company and year
-- **Report Details**: View detailed report information including JSON data
-- **TypeScript**: Fully typed with TypeScript for better development experience
-- **Modern ES Modules**: Uses ES2020 modules for clean code organization
+- **Dashboard**: View reports for a specific company.
+- **Reports List**: Browse all reports with client-side filtering and sorting.
+- **Expandable Rows**: View report details inline in the list view.
+- **Raw Report Viewer**: View HTML, XML, or Text content of raw reports.
 
 ## Development
 
@@ -19,68 +19,37 @@ A TypeScript-based Single Page Application (SPA) for viewing financial reports f
 ### Setup
 
 1. Install dependencies:
+
 ```bash
 npm install
 ```
 
-2. Build the TypeScript files:
+2. Start Development Server (with HMR):
+
+```bash
+npm run dev
+```
+
+Then open `http://localhost:5173` in your browser.
+
+## Production Build
+
+1. Build the project:
+
 ```bash
 npm run build
 ```
 
-3. Serve the application:
+The output will be in the `dist/` directory.
+
+2. Serve the build locally:
+
 ```bash
-npm run serve
+./serve.sh
+# or
+npm run preview
 ```
 
-Or for development with auto-rebuild:
-```bash
-npm run watch
-# In another terminal:
-npm run serve
-```
+## API Configuration
 
-Then open `http://localhost:3000` in your browser.
-
-## Usage
-
-### Option 1: Build and Serve
-
-1. Build the TypeScript code:
-```bash
-npm run build
-```
-
-2. Serve with a local server:
-```bash
-npm run serve
-```
-
-### Option 2: Direct File Access (after build)
-
-After building, you can open `index.html` directly in your browser. The frontend will attempt to connect to `http://localhost:8080`.
-
-## Configuration
-
-To change the backend API URL, edit `app.js`:
-
-```javascript
-const API_BASE_URL = 'http://localhost:8080';
-```
-
-## API Endpoints
-
-The frontend expects the following API endpoints:
-
-- `GET /api/v1/companies` - List all companies
-- `GET /api/v1/reports?corp_code={code}` - List reports for a company
-- `GET /api/v1/reports/:receipt_number` - Get report details
-- `GET /health` - Health check
-
-## Browser Support
-
-Works in all modern browsers (Chrome, Firefox, Safari, Edge) that support:
-- ES6+ JavaScript
-- Fetch API
-- CSS Grid and Flexbox
-
+The API URL is configured in `src/api.ts`. Default is `http://localhost:8080`.

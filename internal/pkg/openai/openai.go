@@ -1,13 +1,18 @@
 package openai
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	openai "github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
@@ -109,15 +114,26 @@ type IssuanceTermsExtract struct {
 	Score              Score    `json:"score"`
 }
 
-const (
-	defaultModel     = shared.ResponsesModel("gpt-5.1")
-	previewByteLimit = 128 * 1024 // cap what we send to the model
-)
+type batchRequest struct {
+	CustomID string                      `json:"custom_id"`
+	Method   string                      `json:"method"`
+	URL      string                      `json:"url"`
+	Body     responses.ResponseNewParams `json:"body"`
+}
 
-var (
-	// ErrMissingAPIKey is returned when OPENAI_API_KEY was not configured.
-	ErrMissingAPIKey = errors.New("OPENAI_API_KEY is not set")
-)
+type batchOutputLine struct {
+	CustomID string `json:"custom_id"`
+	Error    *struct {
+		Message string `json:"message"`
+		Code    string `json:"code"`
+		Type    string `json:"type"`
+		Param   string `json:"param"`
+	} `json:"error"`
+	Response struct {
+		StatusCode int             `json:"status_code"`
+		Body       json.RawMessage `json:"body"`
+	} `json:"response"`
+}
 
 // FileAnalyzer is a thin wrapper around the OpenAI responses client that can
 // analyze a local file using the latest SDK.
@@ -125,6 +141,16 @@ type FileAnalyzer struct {
 	client *openai.Client
 	model  shared.ResponsesModel
 }
+
+const (
+	defaultModel     = shared.ResponsesModel("gpt-5.2")
+	PreviewByteLimit = 128 * 1024 // cap what we send to the model, 128KB
+)
+
+var (
+	// ErrMissingAPIKey is returned when OPENAI_API_KEY was not configured.
+	ErrMissingAPIKey = errors.New("OPENAI_API_KEY is not set")
+)
 
 // NewFileAnalyzerFromEnv builds a FileAnalyzer using the OPENAI_API_KEY env var.
 func NewFileAnalyzerFromEnv() (*FileAnalyzer, error) {
@@ -137,8 +163,12 @@ func NewFileAnalyzerFromEnv() (*FileAnalyzer, error) {
 	return &FileAnalyzer{client: &client, model: defaultModel}, nil
 }
 
-func NewFileAnalyzer(apiKey string) *FileAnalyzer {
+func NewFileAnalyzer(apiKey string, model ...shared.ResponsesModel) *FileAnalyzer {
 	client := openai.NewClient(option.WithAPIKey(apiKey))
+	if len(model) > 0 {
+		return &FileAnalyzer{client: &client, model: model[0]}
+	}
+
 	return &FileAnalyzer{client: &client, model: defaultModel}
 }
 
@@ -154,26 +184,7 @@ func (a *FileAnalyzer) AnalyzeFile(ctx context.Context, filePath string, docType
 		return nil, fmt.Errorf("read %s: %w", filePath, err)
 	}
 
-	mainPrompt := systemPrompt
-	prompt := ""
-	var report interface{}
-	if docType == "securities_issuance_terms" {
-		mainPrompt += securitiesIssuanceTermsSchema
-		prompt = buildPrompt(string(contents), additionalSecuritiesIssuanceTermsSchema)
-		report = &CorrectionReportJSON{}
-	} else if docType == "supply" { // "SUPPLY"
-		mainPrompt += supplySchema
-		prompt = buildPrompt(string(contents), "")
-		report = &SupplyExtract{}
-	} else if docType == "report" {
-		mainPrompt += reportSchema
-		prompt = buildPrompt(string(contents), additionalReportSchema)
-		report = &Report{}
-	} else {
-		mainPrompt += defaultSchema
-		prompt = buildPrompt(string(contents), defaultAdditionalSchema)
-		report = &DefaultReport{}
-	}
+	mainPrompt, prompt, report := preparePrompt(docType, string(contents), true)
 
 	resp, err := a.client.Responses.New(ctx, responses.ResponseNewParams{
 		Model: a.model,
@@ -183,6 +194,7 @@ func (a *FileAnalyzer) AnalyzeFile(ctx context.Context, filePath string, docType
 				responses.ResponseInputItemParamOfMessage(prompt, responses.EasyInputMessageRoleUser),
 			},
 		},
+		ServiceTier: responses.ResponseNewParamsServiceTierFlex,
 		//		Reasoning: shared.ReasoningParam{
 		//			Effort:  shared.ReasoningEffortHigh,
 		//			Summary: shared.ReasoningSummaryDetailed,
@@ -210,27 +222,8 @@ func (a *FileAnalyzer) AnalyzeFile(ctx context.Context, filePath string, docType
 	return report, nil
 }
 
-func (a *FileAnalyzer) AnalyzeReport(ctx context.Context, contents string, docType string) (interface{}, error) {
-	mainPrompt := systemPrompt
-	prompt := ""
-	var report interface{}
-	if docType == "securities_issuance_terms" {
-		mainPrompt += securitiesIssuanceTermsSchema
-		prompt = buildPrompt(string(contents), additionalSecuritiesIssuanceTermsSchema)
-		report = &CorrectionReportJSON{}
-	} else if docType == "supply" { // "SUPPLY"
-		mainPrompt += supplySchema
-		prompt = buildPrompt(string(contents), "")
-		report = &SupplyExtract{}
-	} else if docType == "report" {
-		mainPrompt += reportSchema
-		prompt = buildPrompt(string(contents), additionalReportSchema)
-		report = &Report{}
-	} else {
-		mainPrompt += defaultSchema
-		prompt = buildPrompt(string(contents), defaultAdditionalSchema)
-		report = &DefaultReport{}
-	}
+func (a *FileAnalyzer) AnalyzeReport(ctx context.Context, contents string, docType string) (interface{}, int64, error) {
+	mainPrompt, prompt, report := preparePrompt(docType, contents, true)
 
 	resp, err := a.client.Responses.New(ctx, responses.ResponseNewParams{
 		Model: a.model,
@@ -240,23 +233,21 @@ func (a *FileAnalyzer) AnalyzeReport(ctx context.Context, contents string, docTy
 				responses.ResponseInputItemParamOfMessage(prompt, responses.EasyInputMessageRoleUser),
 			},
 		},
-		//		Reasoning: shared.ReasoningParam{
-		//			Effort:  shared.ReasoningEffortHigh,
-		//			Summary: shared.ReasoningSummaryDetailed,
-		//		},
 	})
 
 	if err != nil {
-		return nil, fmt.Errorf("call OpenAI: %w", err)
+		return nil, 0, fmt.Errorf("call OpenAI: %w", err)
 	}
+
+	log.Printf("resp: %s, input: %d, output: %d, total: %d\n", resp.ID, resp.Usage.InputTokens, resp.Usage.OutputTokens, resp.Usage.TotalTokens)
 
 	output := strings.TrimSpace(resp.OutputText())
 	if output == "" {
-		return nil, errors.New("model returned an empty response")
+		return nil, 0, errors.New("model returned an empty response")
 	}
 
 	if err := json.Unmarshal([]byte(output), report); err != nil {
-		return nil, fmt.Errorf("unmarshal JSON: %w", err)
+		return nil, 0, fmt.Errorf("unmarshal JSON: %w", err)
 	}
 
 	// if docType == "report" {
@@ -264,12 +255,204 @@ func (a *FileAnalyzer) AnalyzeReport(ctx context.Context, contents string, docTy
 	// 	log.Printf("Trend Metrics: %+v\n", metrics)
 	// }
 
-	return report, nil
+	return report, resp.Usage.TotalTokens, nil
 }
 
-func buildPrompt(rawContents string, additionalPrompt string) string {
-	if len(rawContents) > previewByteLimit {
-		rawContents = rawContents[:previewByteLimit] + "\n\n[...truncated for brevity...]"
+func (a *FileAnalyzer) GetModel() shared.ResponsesModel {
+	return a.model
+}
+
+// AnalyzeReportBatch uses the Batch API to handle large inputs without truncation.
+// This keeps the original AnalyzeReport behavior unchanged and opt-in.
+func (a *FileAnalyzer) AnalyzeReportBatch(ctx context.Context, contents string, docType string) (interface{}, int64, error) {
+	return a.analyzeReportWithBatch(ctx, contents, docType)
+}
+
+func (a *FileAnalyzer) analyzeReportWithBatch(ctx context.Context, contents string, docType string) (interface{}, int64, error) {
+	mainPrompt, prompt, report := preparePrompt(docType, contents, false)
+
+	linePayload := batchRequest{
+		CustomID: fmt.Sprintf("report-%d", time.Now().UnixNano()),
+		Method:   http.MethodPost,
+		URL:      "/v1/responses",
+		Body: responses.ResponseNewParams{
+			Model: a.model,
+			Input: responses.ResponseNewParamsInputUnion{
+				OfInputItemList: responses.ResponseInputParam{
+					responses.ResponseInputItemParamOfMessage(mainPrompt, responses.EasyInputMessageRoleSystem),
+					responses.ResponseInputItemParamOfMessage(prompt, responses.EasyInputMessageRoleUser),
+				},
+			},
+		},
+	}
+
+	lineBytes, err := json.Marshal(linePayload)
+	if err != nil {
+		return nil, 0, fmt.Errorf("marshal batch request: %w", err)
+	}
+
+	tmpFile, err := os.CreateTemp("", "xbrl-batch-*.jsonl")
+	if err != nil {
+		return nil, 0, fmt.Errorf("create temp batch file: %w", err)
+	}
+	defer os.Remove(tmpFile.Name())
+
+	if _, err := tmpFile.Write(append(lineBytes, '\n')); err != nil {
+		return nil, 0, fmt.Errorf("write batch file: %w", err)
+	}
+	if err := tmpFile.Close(); err != nil {
+		return nil, 0, fmt.Errorf("close batch file: %w", err)
+	}
+
+	f, err := os.Open(tmpFile.Name())
+	if err != nil {
+		return nil, 0, fmt.Errorf("open batch file: %w", err)
+	}
+	defer f.Close()
+
+	upload, err := a.client.Files.New(ctx, openai.FileNewParams{
+		File:    f,
+		Purpose: openai.FilePurposeBatch,
+	})
+	if err != nil {
+		return nil, 0, fmt.Errorf("upload batch input: %w", err)
+	}
+
+	batch, err := a.client.Batches.New(ctx, openai.BatchNewParams{
+		CompletionWindow: openai.BatchNewParamsCompletionWindow24h,
+		Endpoint:         openai.BatchNewParamsEndpointV1Responses,
+		InputFileID:      upload.ID,
+	})
+	if err != nil {
+		return nil, 0, fmt.Errorf("create batch: %w", err)
+	}
+
+	completedBatch, err := a.waitForBatchCompletion(ctx, batch.ID)
+	if err != nil {
+		return nil, 0, err
+	}
+	log.Printf("batch: %s, input: %d, output: %d, total: %d\n", completedBatch.ID, completedBatch.Usage.InputTokens, completedBatch.Usage.OutputTokens, completedBatch.Usage.TotalTokens)
+
+	if completedBatch.OutputFileID == "" {
+		return nil, 0, errors.New("batch completed without output file")
+	}
+
+	outputResp, err := a.client.Files.Content(ctx, completedBatch.OutputFileID)
+	if err != nil {
+		return nil, 0, fmt.Errorf("download batch output: %w", err)
+	}
+	defer outputResp.Body.Close()
+
+	outputData, err := io.ReadAll(outputResp.Body)
+	if err != nil {
+		return nil, 0, fmt.Errorf("read batch output: %w", err)
+	}
+
+	return parseBatchOutput(outputData, report)
+}
+
+func (a *FileAnalyzer) waitForBatchCompletion(ctx context.Context, batchID string) (*openai.Batch, error) {
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-ticker.C:
+			current, err := a.client.Batches.Get(ctx, batchID)
+			if err != nil {
+				return nil, fmt.Errorf("poll batch %s: %w", batchID, err)
+			}
+
+			switch current.Status {
+			case openai.BatchStatusCompleted:
+				return current, nil
+			case openai.BatchStatusFailed, openai.BatchStatusCancelled, openai.BatchStatusExpired:
+				return nil, fmt.Errorf("batch %s ended with status %s: %+v", batchID, current.Status, current.Errors)
+			}
+		}
+	}
+}
+
+func parseBatchOutput(raw []byte, report interface{}) (interface{}, int64, error) {
+	scanner := bufio.NewScanner(bytes.NewReader(raw))
+	// Allow scanning large JSONL lines.
+	scanner.Buffer(make([]byte, 0, 1024*1024), 32*1024*1024)
+
+	for scanner.Scan() {
+		line := bytes.TrimSpace(scanner.Bytes())
+		if len(line) == 0 {
+			continue
+		}
+
+		var payload batchOutputLine
+		if err := json.Unmarshal(line, &payload); err != nil {
+			return nil, 0, fmt.Errorf("unmarshal batch output line: %w", err)
+		}
+
+		if payload.Error != nil {
+			return nil, 0, fmt.Errorf("batch item error: %s", payload.Error.Message)
+		}
+
+		if payload.Response.StatusCode != http.StatusOK {
+			return nil, 0, fmt.Errorf("batch response returned status %d", payload.Response.StatusCode)
+		}
+
+		var resp responses.Response
+		if err := json.Unmarshal(payload.Response.Body, &resp); err != nil {
+			return nil, 0, fmt.Errorf("unmarshal response body: %w", err)
+		}
+
+		output := strings.TrimSpace(resp.OutputText())
+		if output == "" {
+			return nil, 0, errors.New("model returned an empty response")
+		}
+
+		if err := json.Unmarshal([]byte(output), report); err != nil {
+			return nil, 0, fmt.Errorf("unmarshal JSON: %w", err)
+		}
+
+		return report, resp.Usage.TotalTokens, nil
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, 0, fmt.Errorf("scan batch output: %w", err)
+	}
+
+	return nil, 0, errors.New("no batch output lines found")
+}
+
+func preparePrompt(docType string, contents string, truncate bool) (string, string, interface{}) {
+	mainPrompt := systemPrompt
+	additionalPrompt := ""
+	var report interface{}
+
+	switch docType {
+	case "securities_issuance_terms":
+		mainPrompt += securitiesIssuanceTermsSchema
+		additionalPrompt = additionalSecuritiesIssuanceTermsSchema
+		report = &CorrectionReportJSON{}
+	case "supply":
+		mainPrompt += supplySchema
+		report = &SupplyExtract{}
+	case "report":
+		mainPrompt += reportSchema
+		additionalPrompt = additionalReportSchema
+		report = &Report{}
+	default:
+		mainPrompt += defaultSchema
+		additionalPrompt = defaultAdditionalSchema
+		report = &DefaultReport{}
+	}
+
+	prompt := buildPromptWithLimit(contents, additionalPrompt, truncate)
+	return mainPrompt, prompt, report
+}
+
+func buildPromptWithLimit(rawContents string, additionalPrompt string, enforceLimit bool) string {
+	if enforceLimit && len(rawContents) > PreviewByteLimit {
+		rawContents = rawContents[:PreviewByteLimit] + "\n\n[...truncated for brevity...]"
 	}
 
 	builder := strings.Builder{}
