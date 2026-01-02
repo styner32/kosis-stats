@@ -352,7 +352,7 @@ func (a *FileAnalyzer) analyzeReportWithBatch(ctx context.Context, contents stri
 }
 
 func (a *FileAnalyzer) waitForBatchCompletion(ctx context.Context, batchID string) (*openai.Batch, error) {
-	ticker := time.NewTicker(5 * time.Second)
+	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 
 	for {
@@ -364,6 +364,8 @@ func (a *FileAnalyzer) waitForBatchCompletion(ctx context.Context, batchID strin
 			if err != nil {
 				return nil, fmt.Errorf("poll batch %s: %w", batchID, err)
 			}
+
+			log.Printf("batch %s status: %s", batchID, current.Status)
 
 			switch current.Status {
 			case openai.BatchStatusCompleted:
