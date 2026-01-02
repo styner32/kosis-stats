@@ -107,8 +107,8 @@ func main() {
 		out: bufio.NewWriter(os.Stdout),
 		tools: []Tool{
 			{
-				Name:        "reports_by_corp_name",
-				Description: "List recent reports matching a partial corp_name.",
+				Name:        "disclosures_reports_by_corp_name",
+				Description: "List recent reports or disclosures matching a partial corp_name.",
 				InputSchema: map[string]interface{}{
 					"type": "object",
 					"properties": map[string]interface{}{
@@ -124,6 +124,33 @@ func main() {
 						},
 					},
 					"required": []string{"corp_name"},
+				},
+			},
+			{
+				Name:        "reports_summary_all_companies",
+				Description: "Get report summaries across all companies.",
+				InputSchema: map[string]interface{}{
+					"type": "object",
+					"properties": map[string]interface{}{
+						"limit": map[string]interface{}{
+							"type":        "integer",
+							"minimum":     1,
+							"maximum":     100,
+							"description": "Number of reports to return (default 10).",
+						},
+						"corp_code": map[string]interface{}{
+							"type":        "string",
+							"description": "Optional corp code to filter results.",
+						},
+						"start_date": map[string]interface{}{
+							"type":        "string",
+							"description": "Filter reports with receipt date >= YYYY-MM-DD.",
+						},
+						"end_date": map[string]interface{}{
+							"type":        "string",
+							"description": "Filter reports with receipt date < YYYY-MM-DD.",
+						},
+					},
 				},
 			},
 		},
@@ -246,8 +273,18 @@ func (s *MCPServer) handleToolCall(req Request) *Response {
 	}
 
 	switch params.Name {
-	case "reports_by_corp_name":
+	case "disclosures_reports_by_corp_name":
 		result, rpcErr := s.callReportsByCorpName(params.Arguments)
+		if rpcErr != nil {
+			return &Response{
+				JSONRPC: "2.0",
+				ID:      req.ID,
+				Error:   rpcErr,
+			}
+		}
+		return s.reply(req, result)
+	case "reports_summary_all_companies":
+		result, rpcErr := s.callReportsSummaryAllCompanies(params.Arguments)
 		if rpcErr != nil {
 			return &Response{
 				JSONRPC: "2.0",
@@ -340,6 +377,110 @@ func (s *MCPServer) callReportsByCorpName(args map[string]interface{}) (*ToolCal
 	}, nil
 }
 
+func (s *MCPServer) callReportsSummaryAllCompanies(args map[string]interface{}) (*ToolCallResult, *ResponseError) {
+	limit := 10
+	if rawLimit, ok := args["limit"]; ok {
+		switch v := rawLimit.(type) {
+		case float64:
+			limit = int(v)
+		case int:
+			limit = v
+		case json.Number:
+			if i, err := strconv.Atoi(string(v)); err == nil {
+				limit = i
+			}
+		default:
+			// limit 파싱 실패 시 기본값 사용
+		}
+	}
+	if limit <= 0 {
+		limit = 10
+	}
+	if limit > 100 {
+		limit = 100
+	}
+
+	corpCode := ""
+	if rawCorpCode, ok := args["corp_code"]; ok {
+		corpCodeStr, ok := rawCorpCode.(string)
+		if !ok {
+			return nil, &ResponseError{Code: -32602, Message: "corp_code must be a string"}
+		}
+		corpCode = strings.TrimSpace(corpCodeStr)
+	}
+
+	startDate := ""
+	if rawStartDate, ok := args["start_date"]; ok {
+		startDateStr, ok := rawStartDate.(string)
+		if !ok {
+			return nil, &ResponseError{Code: -32602, Message: "start_date must be a string"}
+		}
+		startDate = strings.TrimSpace(startDateStr)
+	}
+
+	endDate := ""
+	if rawEndDate, ok := args["end_date"]; ok {
+		endDateStr, ok := rawEndDate.(string)
+		if !ok {
+			return nil, &ResponseError{Code: -32602, Message: "end_date must be a string"}
+		}
+		endDate = strings.TrimSpace(endDateStr)
+	}
+
+	query := url.Values{}
+	query.Set("limit", strconv.Itoa(limit))
+	if corpCode != "" {
+		query.Set("corp_code", corpCode)
+	}
+	if startDate != "" {
+		query.Set("start_date", startDate)
+	}
+	if endDate != "" {
+		query.Set("end_date", endDate)
+	}
+
+	urlStr := fmt.Sprintf("%s/reports?%s", s.apiBaseURL(), query.Encode())
+
+	log.Printf("Calling upstream: %s", urlStr)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, urlStr, nil)
+	if err != nil {
+		return nil, &ResponseError{Code: -32000, Message: "failed to build request", Data: err.Error()}
+	}
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return nil, &ResponseError{Code: -32000, Message: "request failed", Data: err.Error()}
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, &ResponseError{Code: -32000, Message: "failed to read response", Data: err.Error()}
+	}
+
+	if resp.StatusCode >= 300 {
+		return nil, &ResponseError{Code: -32000, Message: fmt.Sprintf("upstream error: %s", resp.Status), Data: string(body)}
+	}
+
+	var raw json.RawMessage
+	if err := json.Unmarshal(body, &raw); err != nil {
+		raw = json.RawMessage(fmt.Sprintf("%q", string(body)))
+	}
+
+	return &ToolCallResult{
+		Content: []ContentItem{
+			{
+				Type: "text",
+				Text: string(body),
+			},
+		},
+	}, nil
+}
+
 func (s *MCPServer) reply(req Request, result interface{}) *Response {
 	return &Response{
 		JSONRPC: "2.0",
@@ -409,6 +550,13 @@ func getEnv(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+func (s *MCPServer) apiBaseURL() string {
+	if strings.HasSuffix(s.baseURL, "/mcp") {
+		return strings.TrimSuffix(s.baseURL, "/mcp")
+	}
+	return s.baseURL
 }
 
 func urlEncode(v string) string {
