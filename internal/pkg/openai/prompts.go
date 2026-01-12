@@ -1,7 +1,15 @@
 package openai
 
 const (
-	systemPrompt = `너의 임무는 한국 DART 공시 원문에서 숫자/사실을 추출해 정해진 JSON 스키마로만 출력하는 것이다. 추론은 최소화하고, 문서에 명시된 값만 사용하라. 공시 내 중복된 숫자/문장은 제거하되, 표기된 숫자들은 가능한 모두 누락 없이 표시하라. 출력은 반드시 유효한 JSON 한 개만 반환하라. 설명문 금지.`
+	systemPrompt = `너의 임무는 한국 DART 공시 원문에서 사실과 수치를 추출해 정해진 JSON 스키마로만 출력하는 것이다. 추론은 최소화하고, 문서에 명시된 값만 사용하라.
+  모든 공시 유형에 대해 다음 핵심 정보 카테고리는 반드시 세부 속성까지 식별하여 추출하라:
+  1. 재무 및 수치 상세 (Financial Specifics): 총액(Total Amount)뿐만 아니라, 이를 구성하는 단가(Unit Price), 이자율(Rates), 비율(Ratios), 환율 등을 반드시 포함하라. 예: 주식수와 함께 '행사가격' 포함, 계약금액과 함께 '계약보증금률' 포함.
+  2. 인물 및 대상의 속성 (Entity Attributes): 단순 이름/법인명 나열을 넘어, 해당 대상의 직위(Role), 관계(Relation), 상대방 정보(Counterparty)를 함께 명시하라. 예: '김형민' 대신 '대표이사 김형민', '소송' 시 '원고/피고' 구분.
+  3. 시점과 기간 (Time & Period): '공시 제출일'과 구별되는 실제 발생일(Event Date), 계약 기간(Start/End), 만기일을 정확히 추출하라.
+  4. 조건 및 제약 (Conditions & Terms): 단순 사실 외에 보호예수(Lock-up), 옵션(Put/Call), 해지 조건 등 수치에 영향을 주는 제약 사항을 포함하라.
+	5. primary_cause: 이번 보고서가 제출된 핵심 사유를 한 문장으로 요약하라.
+  6. details: 변동이 발생한 모든 주주(임원 포함)의 성명, 관계, 변동일, 구체적 사유, 변동 수량을 포함하여 하나의 자연스러운 문장으로 정리하라.
+  공시 내 단순 중복은 제거하되, 위 핵심 카테고리에 해당하는 수치와 팩트는 생략 없이 모두 표시하라. 출력은 반드시 유효한 JSON 한 개만 반환하라. 설명문 금지.`
 
 	// Securities Issuance Terms
 	securitiesIssuanceTermsSchema = `
@@ -207,6 +215,38 @@ const (
 		summary: string,
 		related_companies: [string] (연관된 회사 이름 배열, 없을 경우 빈 배열 []),
 		schema_suggestion: string (추출된 데이터에 적합한 JSON 스키마 예시, 아래 Output Format 참고)
+		primary_cause: string,
+		details: string,
+		data_extraction: {
+    financial_specifics: [
+      {
+        item: string,
+        value: string,
+        unit: string,
+        details: string
+      }
+    ],
+    entity_attributes: [
+      {
+        name: string,
+        role: string,
+        relationship: string,
+        identifier: string
+      }
+    ],
+    time_period: [
+      {
+        label: string,
+        date: string,
+        note: string
+      }
+    ],
+    conditions_terms: [
+      {
+        term_name: string,
+        content: string
+      }
+    ]
 	}
 	## Output Format
 		- 항상 아래의 필드명 및 순서(company_name, date, type, summary, related_companies, schema_suggestion)에 맞추어 유효한 JSON 오브젝트 하나만 출력.

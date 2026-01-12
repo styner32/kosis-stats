@@ -369,6 +369,28 @@ var _ = Describe("FinancialController", func() {
 				]
 			}`))
 		})
+
+		It("sets end_date to the next day if it's the same as start_date", func() {
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/reports?start_date=2025-11-23&end_date=2025-11-23", nil)
+			resp := httptest.NewRecorder()
+
+			router.ServeHTTP(resp, req)
+			Expect(resp.Code).To(Equal(http.StatusOK))
+			Expect(resp.Body.String()).To(MatchJSON(`{
+				"reports": [
+					{
+						"corp_name": "A 회사",
+						"corp_code": "10000001",
+						"report_name": "Report A",
+						"raw_report_id": 1,
+						"receipt_number": "20251123000001",
+						"receipt_date": "2025-11-23",
+						"report_type": "0",
+						"analysis": {"summary": "a"}
+					}
+				]
+			}`))
+		})
 	})
 
 	Describe("GET /api/v1/reports/:corp_code/:raw_report_id", func() {
@@ -395,6 +417,56 @@ var _ = Describe("FinancialController", func() {
 			}
 			Expect(json.Unmarshal(resp.Body.Bytes(), &body)).To(Succeed())
 			Expect(body.RawReport).To(Equal(base64.StdEncoding.EncodeToString([]byte("doc1"))))
+		})
+	})
+
+	Describe("GET /api/v1/reports/receipt/:receipt_number", func() {
+		receiptNumber := "20251123000001"
+		var rawReport *models.RawReport
+
+		BeforeEach(func() {
+			ctx := context.Background()
+			rawReport = &models.RawReport{
+				ReceiptNumber: receiptNumber,
+				CorpCode:      "10000001",
+				ReportName:    "Report A",
+				BlobData:      []byte("doc1"),
+				BlobSize:      4,
+				JSONData:      json.RawMessage(`{"a":1}`),
+			}
+			createRawReport(dbConn, ctx, rawReport)
+
+			analysis := &models.Analysis{
+				RawReportID: rawReport.ID,
+				Analysis:    json.RawMessage(`{"summary":"a"}`),
+			}
+			createAnalysis(dbConn, ctx, analysis)
+		})
+
+		It("returns summary and raw report for the given receipt number", func() {
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/reports/receipt/"+receiptNumber, nil)
+			resp := httptest.NewRecorder()
+
+			router.ServeHTTP(resp, req)
+			Expect(resp.Code).To(Equal(http.StatusOK))
+
+			var body struct {
+				Summary   json.RawMessage `json:"summary"`
+				RawReport string          `json:"raw_report"`
+			}
+			Expect(json.Unmarshal(resp.Body.Bytes(), &body)).To(Succeed())
+			Expect(string(body.Summary)).To(MatchJSON(`{"summary":"a"}`))
+			Expect(body.RawReport).To(Equal(base64.StdEncoding.EncodeToString([]byte("doc1"))))
+		})
+
+		It("returns 404 if receipt number is not found", func() {
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/reports/receipt/20251123099999", nil)
+			resp := httptest.NewRecorder()
+
+			router.ServeHTTP(resp, req)
+
+			Expect(resp.Code).To(Equal(http.StatusNotFound))
+			Expect(resp.Body.String()).To(MatchJSON(`{"error": "Raw report not found"}`))
 		})
 	})
 

@@ -425,6 +425,11 @@ func parseBatchOutput(raw []byte, report interface{}) (interface{}, int64, error
 	return nil, 0, errors.New("no batch output lines found")
 }
 
+func ShowPrompts(docType string, contents string) (string, string) {
+	systemPrompt, prompt, _ := preparePrompt(docType, contents, false)
+	return systemPrompt, prompt
+}
+
 func preparePrompt(docType string, contents string, truncate bool) (string, string, interface{}) {
 	mainPrompt := systemPrompt
 	additionalPrompt := ""
@@ -443,8 +448,8 @@ func preparePrompt(docType string, contents string, truncate bool) (string, stri
 		additionalPrompt = additionalReportSchema
 		report = &Report{}
 	default:
-		mainPrompt += defaultSchema
-		additionalPrompt = defaultAdditionalSchema
+		mainPrompt += fmt.Sprintf("\n%s", defaultSchema)
+		additionalPrompt = fmt.Sprintf("\n%s", defaultAdditionalSchema)
 		report = &DefaultReport{}
 	}
 

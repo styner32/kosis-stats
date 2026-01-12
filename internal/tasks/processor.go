@@ -155,13 +155,8 @@ func (p *TaskProcessor) HandleFetchReportsTask(ctx context.Context, t *asynq.Tas
 					return err
 				}
 
-				analysis = &openai.DefaultReport{
-					CompanyName:      v.CompanyName,
-					Date:             v.Date,
-					Type:             v.Type,
-					Summary:          v.Summary,
-					RelatedCompanies: v.RelatedCompanies,
-				}
+				v.SchemaSuggestion = ""
+				analysis = v
 			}
 		}
 

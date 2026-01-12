@@ -97,7 +97,7 @@ func main() {
 	// 중요: 로그는 반드시 Stderr로 출력해야 합니다. (Stdout은 통신용)
 	log.SetOutput(os.Stderr)
 
-	baseURL := strings.TrimRight(getEnv("KOSIS_BASE_URL", "http://localhost:8080/api/v1/mcp"), "/")
+	baseURL := strings.TrimRight(getEnv("KOSIS_BASE_URL", "http://localhost:8080/api/v1"), "/")
 	server := &MCPServer{
 		baseURL: baseURL,
 		client: &http.Client{
@@ -151,6 +151,20 @@ func main() {
 							"description": "Filter reports with receipt date < YYYY-MM-DD.",
 						},
 					},
+				},
+			},
+			{
+				Name:        "reports_summary_and_raw_by_receipt_number",
+				Description: "Get report summary and raw report by receipt number.",
+				InputSchema: map[string]interface{}{
+					"type": "object",
+					"properties": map[string]interface{}{
+						"receipt_number": map[string]interface{}{
+							"type":        "string",
+							"description": "Receipt number.",
+						},
+					},
+					"required": []string{"receipt_number"},
 				},
 			},
 		},
@@ -293,6 +307,16 @@ func (s *MCPServer) handleToolCall(req Request) *Response {
 			}
 		}
 		return s.reply(req, result)
+	case "reports_summary_and_raw_by_receipt_number":
+		result, rpcErr := s.callReportsSummaryAndRawByReceiptNumber(params.Arguments)
+		if rpcErr != nil {
+			return &Response{
+				JSONRPC: "2.0",
+				ID:      req.ID,
+				Error:   rpcErr,
+			}
+		}
+		return s.reply(req, result)
 	default:
 		return s.error(req, -32601, fmt.Sprintf("tool not found: %s", params.Name), nil)
 	}
@@ -332,7 +356,7 @@ func (s *MCPServer) callReportsByCorpName(args map[string]interface{}) (*ToolCal
 		limit = 100
 	}
 
-	urlStr := fmt.Sprintf("%s/reports/by-corp-name?corp_name=%s&limit=%d", s.baseURL, urlEncode(corpName), limit)
+	urlStr := fmt.Sprintf("%s/mcp/reports/by-corp-name?corp_name=%s&limit=%d", s.baseURL, urlEncode(corpName), limit)
 
 	// 로그 추가 (디버깅용)
 	log.Printf("Calling upstream: %s", urlStr)
@@ -439,7 +463,59 @@ func (s *MCPServer) callReportsSummaryAllCompanies(args map[string]interface{}) 
 		query.Set("end_date", endDate)
 	}
 
-	urlStr := fmt.Sprintf("%s/reports?%s", s.apiBaseURL(), query.Encode())
+	urlStr := fmt.Sprintf("%s/reports?%s", s.baseURL, query.Encode())
+
+	log.Printf("Calling upstream: %s", urlStr)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, urlStr, nil)
+	if err != nil {
+		return nil, &ResponseError{Code: -32000, Message: "failed to build request", Data: err.Error()}
+	}
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return nil, &ResponseError{Code: -32000, Message: "request failed", Data: err.Error()}
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, &ResponseError{Code: -32000, Message: "failed to read response", Data: err.Error()}
+	}
+
+	if resp.StatusCode >= 300 {
+		return nil, &ResponseError{Code: -32000, Message: fmt.Sprintf("upstream error: %s", resp.Status), Data: string(body)}
+	}
+
+	var raw json.RawMessage
+	if err := json.Unmarshal(body, &raw); err != nil {
+		raw = json.RawMessage(fmt.Sprintf("%q", string(body)))
+	}
+
+	return &ToolCallResult{
+		Content: []ContentItem{
+			{
+				Type: "text",
+				Text: string(body),
+			},
+		},
+	}, nil
+}
+
+func (s *MCPServer) callReportsSummaryAndRawByReceiptNumber(args map[string]interface{}) (*ToolCallResult, *ResponseError) {
+	receiptNumber := ""
+	if rawReceiptNumber, ok := args["receipt_number"]; ok {
+		receiptNumberStr, ok := rawReceiptNumber.(string)
+		if !ok {
+			return nil, &ResponseError{Code: -32602, Message: "receipt_number must be a string"}
+		}
+		receiptNumber = strings.TrimSpace(receiptNumberStr)
+	}
+
+	urlStr := fmt.Sprintf("%s/reports/receipt/%s", s.baseURL, urlEncode(receiptNumber))
 
 	log.Printf("Calling upstream: %s", urlStr)
 
@@ -550,13 +626,6 @@ func getEnv(key, fallback string) string {
 		return v
 	}
 	return fallback
-}
-
-func (s *MCPServer) apiBaseURL() string {
-	if strings.HasSuffix(s.baseURL, "/mcp") {
-		return strings.TrimSuffix(s.baseURL, "/mcp")
-	}
-	return s.baseURL
 }
 
 func urlEncode(v string) string {

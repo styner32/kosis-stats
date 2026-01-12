@@ -47,6 +47,14 @@ To start the background worker:
 make run-worker
 ```
 
+### Run the Dry Run
+
+To run the dry run:
+
+```bash
+RECEIPT_NUMBER=20260109900734 make run-worker-cli
+```
+
 ### Run Tests
 
 To execute the test suite:
