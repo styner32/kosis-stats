@@ -3,7 +3,6 @@ package binance
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"slices"
@@ -29,12 +28,10 @@ func GetCryptoRSI(crypto string) (float64, error) {
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
+	var klines [][]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&klines); err != nil {
 		return 0, err
 	}
-	var klines [][]interface{}
-	json.Unmarshal(body, &klines)
 
 	// 2. Parse Close Prices
 	var closes []float64
