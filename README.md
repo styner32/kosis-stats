@@ -47,6 +47,14 @@ To start the background worker:
 make run-worker
 ```
 
+### Run the Dry Run
+
+To run the dry run:
+
+```bash
+RECEIPT_NUMBER=20260109900734 make run-worker-cli
+```
+
 ### Run Tests
 
 To execute the test suite:
@@ -59,6 +67,12 @@ To verify the MCP server is running:
 
 ```bash
 npx @modelcontextprotocol/inspector ./bin/kosis-mcp
+```
+
+### Run with docker compose
+
+```bash
+docker compose up
 ```
 
 ## Database Migrations

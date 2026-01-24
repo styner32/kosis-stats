@@ -14,6 +14,9 @@ run-mcp: ## Run the MCP stdio server
 run-worker: ## Run the worker: go run
 	go run $(CMD_DIR)/worker/main.go
 
+run-worker-cli: ## Run the worker CLI: go run
+	go run $(CMD_DIR)/worker-cli/main.go $(RECEIPT_NUMBER)
+
 run-web: ## Run the web server: npm run serve
 	cd web && npm run dev
 

@@ -163,10 +163,45 @@ type CreditRating struct {
 }
 
 type DefaultReport struct {
-	CompanyName      string   `json:"company_name"`
-	Date             string   `json:"date"`
-	Type             string   `json:"type"`
-	Summary          string   `json:"summary"`
-	RelatedCompanies []string `json:"related_companies"`
-	SchemaSuggestion string   `json:"schema_suggestion"`
+	CompanyName      string         `json:"company_name"`
+	Date             string         `json:"date"`
+	Type             string         `json:"type"`
+	Summary          string         `json:"summary"`
+	PrimaryCause     string         `json:"primary_cause"`
+	Details          string         `json:"details"`
+	RelatedCompanies []string       `json:"related_companies"`
+	SchemaSuggestion string         `json:"schema_suggestion"`
+	DataExtraction   DataExtraction `json:"data_extraction"`
+}
+
+type DataExtraction struct {
+	FinancialSpecifics []FinancialSpecific `json:"financial_specifics"`
+	EntityAttributes   []EntityAttribute   `json:"entity_attributes"`
+	TimePeriod         []TimePeriod        `json:"time_period"`
+	ConditionsTerms    []ConditionsTerm    `json:"conditions_terms"`
+}
+
+type FinancialSpecific struct {
+	Item    string `json:"item"`
+	Value   string `json:"value"`
+	Unit    string `json:"unit"`
+	Details string `json:"details"`
+}
+
+type EntityAttribute struct {
+	Name         string `json:"name"`
+	Role         string `json:"role"`
+	Relationship string `json:"relationship"`
+	Identifier   string `json:"identifier"`
+}
+
+type TimePeriod struct {
+	Label string `json:"label"`
+	Date  string `json:"date"`
+	Note  string `json:"note"`
+}
+
+type ConditionsTerm struct {
+	TermName string `json:"term_name"`
+	Content  string `json:"content"`
 }

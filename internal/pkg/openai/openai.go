@@ -352,7 +352,7 @@ func (a *FileAnalyzer) analyzeReportWithBatch(ctx context.Context, contents stri
 }
 
 func (a *FileAnalyzer) waitForBatchCompletion(ctx context.Context, batchID string) (*openai.Batch, error) {
-	ticker := time.NewTicker(5 * time.Second)
+	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 
 	for {
@@ -364,6 +364,8 @@ func (a *FileAnalyzer) waitForBatchCompletion(ctx context.Context, batchID strin
 			if err != nil {
 				return nil, fmt.Errorf("poll batch %s: %w", batchID, err)
 			}
+
+			log.Printf("batch %s status: %s", batchID, current.Status)
 
 			switch current.Status {
 			case openai.BatchStatusCompleted:
@@ -423,6 +425,11 @@ func parseBatchOutput(raw []byte, report interface{}) (interface{}, int64, error
 	return nil, 0, errors.New("no batch output lines found")
 }
 
+func ShowPrompts(docType string, contents string) (string, string) {
+	systemPrompt, prompt, _ := preparePrompt(docType, contents, false)
+	return systemPrompt, prompt
+}
+
 func preparePrompt(docType string, contents string, truncate bool) (string, string, interface{}) {
 	mainPrompt := systemPrompt
 	additionalPrompt := ""
@@ -441,8 +448,8 @@ func preparePrompt(docType string, contents string, truncate bool) (string, stri
 		additionalPrompt = additionalReportSchema
 		report = &Report{}
 	default:
-		mainPrompt += defaultSchema
-		additionalPrompt = defaultAdditionalSchema
+		mainPrompt += fmt.Sprintf("\n%s", defaultSchema)
+		additionalPrompt = fmt.Sprintf("\n%s", defaultAdditionalSchema)
 		report = &DefaultReport{}
 	}
 

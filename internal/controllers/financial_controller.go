@@ -39,6 +39,14 @@ type ReportResponse struct {
 	Analysis      json.RawMessage `json:"analysis"`
 }
 
+type ReportSummaryResponse struct {
+	ReceiptNumber string          `json:"receipt_number"`
+	CorpCode      string          `json:"corp_code"`
+	ReportName    string          `json:"report_name"`
+	Summary       json.RawMessage `json:"summary"`
+	RawReport     string          `json:"raw_report"`
+}
+
 // GetCompanies returns a list of all companies
 func (fc *FinancialController) GetCompanies(c *gin.Context) {
 	ctx := c.Request.Context()
@@ -135,6 +143,51 @@ func (fc *FinancialController) GetRawReport(c *gin.Context) {
 	})
 }
 
+// GetReportSummaryByReceiptNumber returns a summary and raw report for a receipt number.
+// TODO: incase raw report is too large, we should handle it by streaming the raw report.
+func (fc *FinancialController) GetReportSummaryByReceiptNumber(c *gin.Context) {
+	receiptNumber := strings.TrimSpace(c.Param("receipt_number"))
+	if receiptNumber == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "receipt_number is required"})
+		return
+	}
+
+	var rawReport models.RawReport
+	err := fc.DB.Model(&models.RawReport{}).Where("receipt_number = ?", receiptNumber).First(&rawReport).Error
+	if err != nil {
+		log.Printf("failed to get raw report by receipt number: %v", err)
+
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Raw report not found"})
+			return
+		}
+
+		log.Printf("failed to get raw report by receipt number: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Something went wrong"})
+		return
+	}
+
+	var analysis models.Analysis
+	err = fc.DB.Model(&models.Analysis{}).Where("raw_report_id = ?", rawReport.ID).First(&analysis).Error
+	if err != nil {
+		log.Printf("failed to get analysis by receipt number: %v", err)
+
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Summary report not found"})
+			return
+		}
+
+		log.Printf("failed to get summary report: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Something went wrong"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"summary":    analysis.Analysis,
+		"raw_report": base64.StdEncoding.EncodeToString(rawReport.BlobData),
+	})
+}
+
 // GetReportsByCorpName returns a JSON list of recent reports for a partial corp_name.
 // This is a non-streaming variant for MCP/Claude clients that expect a simple HTTP response.
 func (fc *FinancialController) GetReportsByCorpName(c *gin.Context) {
@@ -175,8 +228,8 @@ func (fc *FinancialController) GetReportsByCorpName(c *gin.Context) {
 func (fc *FinancialController) GetAllReports(c *gin.Context) {
 	limit := getLimitWithDefault(c, 10)
 	corpCode := c.Query("corp_code")
-	startDate := c.Query("start_date")
-	endDate := c.Query("end_date")
+	startDateStr := c.Query("start_date")
+	endDateStr := c.Query("end_date")
 
 	var reports []ReportResponse
 	scope := fc.DB.
@@ -190,26 +243,33 @@ func (fc *FinancialController) GetAllReports(c *gin.Context) {
 		scope = scope.Where("companies.corp_code = ?", corpCode)
 	}
 
-	if startDate != "" {
-		d, err := time.Parse("2006-01-02", startDate)
+	var startDate time.Time
+	var err error
+
+	if startDateStr != "" {
+		startDate, err = time.Parse("2006-01-02", startDateStr)
 		if err != nil {
 			log.Printf("[WARN] failed to parse start date: %v", err)
 		} else {
-			scope = scope.Where("raw_reports.receipt_number >= ?", d.Format("20060102"))
+			scope = scope.Where("raw_reports.receipt_number >= ?", startDate.Format("20060102"))
 		}
 	}
 
-	if endDate != "" {
-		d, err := time.Parse("2006-01-02", endDate)
+	if endDateStr != "" {
+		d, err := time.Parse("2006-01-02", endDateStr)
 		if err != nil {
 			log.Printf("[WARN] failed to parse end date: %v", err)
 		} else {
+			log.Printf("start date: %v %v %v %v", d, startDate.IsZero(), startDate.After(d), startDate.Equal(d))
+			if !startDate.IsZero() && (startDate.After(d) || startDate.Equal(d)) {
+				d = startDate.Add(24 * time.Hour)
+			}
+
 			scope = scope.Where("raw_reports.receipt_number < ?", d.Format("20060102"))
 		}
 	}
 
-	err := scope.Limit(limit).Scan(&reports).Error
-	if err != nil {
+	if err != scope.Limit(limit).Scan(&reports).Error {
 		log.Printf("failed to get all reports: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Something went wrong"})
 		return
