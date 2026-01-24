@@ -9,17 +9,43 @@ services:
     ports:
       - 5432:5432
     networks:
-      - local-network
+      - dart-local-network
   redis:
     image: redis/redis-stack-server:7.4.0-v8
     ports:
       - "6379:6379"
     volumes:
       - redis-data:/data
+    networks:
+      - dart-local-network
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile_worker
+    env_file:
+      - .env.docker
+    networks:
+      - dart-local-network
+    depends_on:
+      - db
+      - redis
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile_api
+    ports:
+      - 8080:8080
+    env_file:
+      - .env.docker
+    networks:
+      - dart-local-network
+    depends_on:
+      - db
+      - redis
 
 networks:
-  local-network:
-    name: local-network
+  dart-local-network:
+    name: dart-local-network
     driver: bridge
 
 volumes:

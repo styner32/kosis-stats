@@ -69,6 +69,12 @@ To verify the MCP server is running:
 npx @modelcontextprotocol/inspector ./bin/kosis-mcp
 ```
 
+### Run with docker compose
+
+```bash
+docker compose up
+```
+
 ## Database Migrations
 
 Ensure your `DATABASE_URL` environment variable is set before running migrations.
