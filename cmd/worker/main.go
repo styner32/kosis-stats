@@ -71,9 +71,9 @@ func main() {
 		asynq.Config{
 			// Specify different queues or priorities if needed
 			Queues: map[string]int{
-				"default": 3,
+				"default": 1,
 			},
-			Concurrency: 10, // Max 10 concurrent jobs
+			Concurrency: 1, // Max 10 concurrent jobs
 		},
 	)
 

@@ -135,7 +135,7 @@ func main() {
 						"limit": map[string]interface{}{
 							"type":        "integer",
 							"minimum":     1,
-							"maximum":     100,
+							"maximum":     500,
 							"description": "Number of reports to return (default 10).",
 						},
 						"corp_code": map[string]interface{}{
@@ -420,8 +420,8 @@ func (s *MCPServer) callReportsSummaryAllCompanies(args map[string]interface{}) 
 	if limit <= 0 {
 		limit = 10
 	}
-	if limit > 100 {
-		limit = 100
+	if limit > 500 {
+		limit = 500
 	}
 
 	corpCode := ""
