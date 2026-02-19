@@ -109,12 +109,8 @@ func (c *Client) get(path string, q url.Values, v any) error {
 		b, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("kosis http %d: %s", resp.StatusCode, string(b))
 	}
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return err
-	}
 
-	return json.Unmarshal(body, v)
+	return json.NewDecoder(resp.Body).Decode(v)
 }
 
 type TableRef struct {
@@ -308,22 +304,19 @@ func (c *Client) makeRequest(url string, resBody interface{}) error {
 	}
 	defer resp.Body.Close()
 
-	// TODO: convert it to stream in case of large response
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return err
-	}
-
 	if resp.StatusCode != http.StatusOK {
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return fmt.Errorf("kosis http %d: failed to read error body: %w", resp.StatusCode, err)
+		}
 		errBody := &KosisSearchErrorResponse{}
 		if err := json.Unmarshal(body, errBody); err != nil {
-			return err
+			return fmt.Errorf("kosis http %d: %s", resp.StatusCode, string(body))
 		}
-
 		return fmt.Errorf("%s: %s", errBody.Err, errBody.ErrMsg)
 	}
 
-	if err := json.Unmarshal(body, resBody); err != nil {
+	if err := json.NewDecoder(resp.Body).Decode(resBody); err != nil {
 		return err
 	}
 
