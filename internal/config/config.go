@@ -13,6 +13,7 @@ type Config struct {
 	DartAPIKey   string
 	KosisAPIKey  string
 	OpenAIAPIKey string
+	AllowedOrigins string
 }
 
 // LoadConfig reads configuration from environment variables (.env file)
@@ -26,9 +27,10 @@ func LoadConfig() (*Config, error) {
 	return &Config{
 		DatabaseURL:  getEnv("DATABASE_URL", ""),
 		RedisURL:     getEnv("REDIS_URL", ""),
-		DartAPIKey:   getEnv("DART_API_KEY", ""),
-		KosisAPIKey:  getEnv("KOSIS_API_KEY", ""),
-		OpenAIAPIKey: getEnv("OPENAI_API_KEY", ""),
+		DartAPIKey:     getEnv("DART_API_KEY", ""),
+		KosisAPIKey:    getEnv("KOSIS_API_KEY", ""),
+		OpenAIAPIKey:   getEnv("OPENAI_API_KEY", ""),
+		AllowedOrigins: getEnv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:5173"),
 	}, nil
 }
 

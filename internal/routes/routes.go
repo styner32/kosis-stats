@@ -3,6 +3,7 @@ package routes
 import (
 	"kosis/internal/config"
 	"kosis/internal/controllers"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -15,10 +16,31 @@ func SetupRouter(db *gorm.DB, cfg *config.Config) *gin.Engine {
 	// Set up Gin router
 	router := gin.Default()
 
+	// Parse allowed origins
+	var allowedOrigins []string
+	if cfg != nil && cfg.AllowedOrigins != "" {
+		allowedOrigins = strings.Split(cfg.AllowedOrigins, ",")
+	}
+
 	// CORS middleware
 	router.Use(func(c *gin.Context) {
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
-		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+		origin := c.Request.Header.Get("Origin")
+
+		allowed := false
+		if origin != "" {
+			for _, o := range allowedOrigins {
+				if origin == strings.TrimSpace(o) {
+					allowed = true
+					break
+				}
+			}
+		}
+
+		if allowed {
+			c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
+			c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+		}
+
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE")
 
