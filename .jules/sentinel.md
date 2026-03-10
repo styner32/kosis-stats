@@ -1,0 +1,4 @@
+## 2026-03-10 - [Overly Permissive CORS Configuration]
+**Vulnerability:** The application was setting `Access-Control-Allow-Origin: *` while simultaneously setting `Access-Control-Allow-Credentials: true`. This allows any origin to make authenticated requests, which is explicitly prohibited by modern browsers and constitutes a critical security gap (Overly permissive CORS).
+**Learning:** Hardcoded wildcard `*` with credentials true is not secure. A secure CORS configuration should dynamically check the incoming `Origin` header against a predefined list of allowed origins.
+**Prevention:** Use an environment variable like `ALLOWED_ORIGINS` to specify trusted domains. Parse this list at application startup and dynamically reflect the requesting `Origin` if it matches an entry in the whitelist. If no match is found, avoid setting the `Access-Control-Allow-Origin` header to enforce a strict "deny by default" stance.
