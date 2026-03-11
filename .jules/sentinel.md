@@ -1,0 +1,4 @@
+## 2026-03-11 - [Strict CORS Validation Implementation]
+**Vulnerability:** The Go web application's Gin router used a highly permissive CORS configuration, allowing `*` origins combined with `Access-Control-Allow-Credentials: true`. This could permit attackers to execute authenticated requests across domains (CSRF attacks and credential leakage).
+**Learning:** Hardcoding wildcard origins alongside allowed credentials defeats browser security models designed to protect authenticated state, making APIs susceptible to unauthorized access from malicious sites. Go developers must explicitly validate `Origin` headers before responding with matching `Access-Control-Allow-Origin`.
+**Prevention:** Implement dynamic CORS origin matching. Maintain an `ALLOWED_ORIGINS` environment variable, split into a list in the app's configuration, and strictly reflect the origin back only if it matches one of the allowed strings in the origin slice.
