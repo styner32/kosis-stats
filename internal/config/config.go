@@ -2,17 +2,19 @@ package config
 
 import (
 	"os"
+	"strings"
 
 	"github.com/joho/godotenv"
 )
 
 // Config holds all configuration for the application
 type Config struct {
-	DatabaseURL  string // Consolidated DB Connection URL
-	RedisURL     string
-	DartAPIKey   string
-	KosisAPIKey  string
-	OpenAIAPIKey string
+	DatabaseURL    string // Consolidated DB Connection URL
+	RedisURL       string
+	DartAPIKey     string
+	KosisAPIKey    string
+	OpenAIAPIKey   string
+	AllowedOrigins []string // Allowed CORS origins
 }
 
 // LoadConfig reads configuration from environment variables (.env file)
@@ -23,12 +25,21 @@ func LoadConfig() (*Config, error) {
 		// log.Printf("Warning: .env file not found, reading from environment")
 	}
 
+	allowedOriginsStr := getEnv("ALLOWED_ORIGINS", "")
+	var allowedOrigins []string
+	if allowedOriginsStr != "" {
+		for _, origin := range strings.Split(allowedOriginsStr, ",") {
+			allowedOrigins = append(allowedOrigins, strings.TrimSpace(origin))
+		}
+	}
+
 	return &Config{
-		DatabaseURL:  getEnv("DATABASE_URL", ""),
-		RedisURL:     getEnv("REDIS_URL", ""),
-		DartAPIKey:   getEnv("DART_API_KEY", ""),
-		KosisAPIKey:  getEnv("KOSIS_API_KEY", ""),
-		OpenAIAPIKey: getEnv("OPENAI_API_KEY", ""),
+		DatabaseURL:    getEnv("DATABASE_URL", ""),
+		RedisURL:       getEnv("REDIS_URL", ""),
+		DartAPIKey:     getEnv("DART_API_KEY", ""),
+		KosisAPIKey:    getEnv("KOSIS_API_KEY", ""),
+		OpenAIAPIKey:   getEnv("OPENAI_API_KEY", ""),
+		AllowedOrigins: allowedOrigins,
 	}, nil
 }
 
