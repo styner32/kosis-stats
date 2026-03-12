@@ -3,6 +3,7 @@ package routes
 import (
 	"kosis/internal/config"
 	"kosis/internal/controllers"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -15,10 +16,44 @@ func SetupRouter(db *gorm.DB, cfg *config.Config) *gin.Engine {
 	// Set up Gin router
 	router := gin.Default()
 
+	// Parse allowed origins
+	var allowedOrigins []string
+	for _, o := range strings.Split(cfg.AllowedOrigins, ",") {
+		o = strings.TrimSpace(o)
+		if o != "" {
+			allowedOrigins = append(allowedOrigins, o)
+		}
+	}
+
 	// CORS middleware
 	router.Use(func(c *gin.Context) {
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
-		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+		origin := c.Request.Header.Get("Origin")
+
+		// Check if the origin is in the allowed list
+		allowed := false
+		if cfg.AllowedOrigins == "*" {
+			allowed = true
+		} else {
+			for _, o := range allowedOrigins {
+				if o == origin {
+					allowed = true
+					break
+				}
+			}
+		}
+
+		if allowed {
+			// If allowed, always reflect the origin (if present) to support credentials
+			// Modern browsers reject Access-Control-Allow-Origin: * when Access-Control-Allow-Credentials: true
+			if origin != "" {
+				c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
+			} else if cfg.AllowedOrigins == "*" {
+				c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+			}
+
+			c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+		}
+
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE")
 
