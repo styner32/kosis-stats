@@ -13,6 +13,7 @@ type Config struct {
 	DartAPIKey     string
 	KosisAPIKey    string
 	OpenAIAPIKey   string
+	// Comma-separated origins, or exactly "*" for open CORS (no credentials). For credentialed CORS, list explicit origins only.
 	AllowedOrigins string
 }
 

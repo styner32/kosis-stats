@@ -61,17 +61,21 @@ func TestCORS(t *testing.T) {
 			if originHeader != tc.expectedOrigin {
 				t.Errorf("Expected Origin %q, got %q", tc.expectedOrigin, originHeader)
 			}
+			if tc.expectedOrigin != "" {
+				if w.Header().Get("Access-Control-Allow-Credentials") != "true" {
+					t.Errorf("allowlisted origin should set Allow-Credentials true")
+				}
+			}
+			if w.Header().Get("Vary") != "Origin" {
+				t.Errorf("allowlist CORS must set Vary: Origin for cache safety; got %q", w.Header().Get("Vary"))
+			}
 		})
 	}
 }
 
 func TestCORSWildcard(t *testing.T) {
-	// Create a mock DB and config
 	db := &gorm.DB{}
-	cfg := &config.Config{
-		AllowedOrigins: "*",
-	}
-
+	cfg := &config.Config{AllowedOrigins: "*"}
 	router := SetupRouter(db, cfg)
 
 	req, _ := http.NewRequest("GET", "/health", nil)
@@ -83,9 +87,15 @@ func TestCORSWildcard(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Errorf("Expected status 200, got %d", w.Code)
 	}
-
-	originHeader := w.Header().Get("Access-Control-Allow-Origin")
-	if originHeader != "http://malicious.com" { // It should reflect the origin now when wildcard is used
-		t.Errorf("Expected Origin 'http://malicious.com', got %q", originHeader)
+	// Wildcard must be literal * without credentials — never reflect attacker Origin + credentials
+	if got := w.Header().Get("Access-Control-Allow-Origin"); got != "*" {
+		t.Errorf("Expected Access-Control-Allow-Origin %q, got %q", "*", got)
+	}
+	if got := w.Header().Get("Access-Control-Allow-Credentials"); got != "" {
+		t.Errorf("wildcard open CORS must not send Allow-Credentials; got %q", got)
+	}
+	// Literal * is same for every request; Vary: Origin not required for CORS caching
+	if got := w.Header().Get("Vary"); got != "" {
+		t.Errorf("wildcard CORS should not require Vary: Origin; got %q", got)
 	}
 }
