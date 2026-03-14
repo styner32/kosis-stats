@@ -5,8 +5,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"kosis/internal/config"
 	"gorm.io/gorm"
+	"kosis/internal/config"
 )
 
 func TestCORS(t *testing.T) {

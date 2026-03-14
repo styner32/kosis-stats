@@ -65,6 +65,13 @@ func SetupRouter(db *gorm.DB, cfg *config.Config) *gin.Engine {
 		c.Next()
 	})
 
+	// Security headers middleware
+	router.Use(func(c *gin.Context) {
+		c.Writer.Header().Set("X-Content-Type-Options", "nosniff")
+		c.Writer.Header().Set("X-Frame-Options", "DENY")
+		c.Next()
+	})
+
 	// Simple health check endpoint
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "UP"})
