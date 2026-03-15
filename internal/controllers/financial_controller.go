@@ -315,6 +315,14 @@ func getLimitWithDefault(c *gin.Context, defaultValue int) int {
 			log.Printf("failed to parse limit: %v, using default value: %d", err, defaultValue)
 			return defaultValue
 		}
+
+		// 🛡️ Sentinel: Prevent resource exhaustion / DoS
+		// GORM translates negative limit to "no limit", which could fetch massive rows.
+		// Large values could cause memory exhaustion.
+		if limit <= 0 || limit > 100 {
+			log.Printf("Security warning: Invalid limit %d requested, falling back to %d", limit, defaultValue)
+			return defaultValue
+		}
 	}
 	return limit
 }
