@@ -316,5 +316,16 @@ func getLimitWithDefault(c *gin.Context, defaultValue int) int {
 			return defaultValue
 		}
 	}
+
+	// 🛡️ Sentinel: Security fix to prevent DoS via negative limits
+	// GORM interprets negative limits as 'no limit', potentially loading entire tables
+	if limit <= 0 {
+		limit = defaultValue
+	}
+	// 🛡️ Sentinel: Enforce an upper bound on limits to prevent memory exhaustion
+	if limit > 100 {
+		limit = 100
+	}
+
 	return limit
 }
