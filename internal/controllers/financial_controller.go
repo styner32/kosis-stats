@@ -316,5 +316,16 @@ func getLimitWithDefault(c *gin.Context, defaultValue int) int {
 			return defaultValue
 		}
 	}
+
+	// Security: Prevent negative limits (GORM interprets negative as no limit, causing DoS)
+	if limit <= 0 {
+		return defaultValue
+	}
+
+	// Security: Cap maximum limit to prevent memory exhaustion
+	if limit > 1000 {
+		return 1000
+	}
+
 	return limit
 }
