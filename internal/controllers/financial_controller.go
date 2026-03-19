@@ -316,5 +316,13 @@ func getLimitWithDefault(c *gin.Context, defaultValue int) int {
 			return defaultValue
 		}
 	}
+
+	if limit <= 0 {
+		return defaultValue
+	}
+	if limit > 100 {
+		return 100
+	}
+
 	return limit
 }
