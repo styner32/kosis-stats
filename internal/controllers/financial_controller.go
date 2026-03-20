@@ -316,5 +316,15 @@ func getLimitWithDefault(c *gin.Context, defaultValue int) int {
 			return defaultValue
 		}
 	}
+
+	// Security Fix: Prevent DoS by capping pagination limit.
+	// GORM treats negative limits as 'no limit', causing full table scans.
+	if limit <= 0 {
+		limit = defaultValue
+	}
+	if limit > 100 {
+		limit = 100
+	}
+
 	return limit
 }

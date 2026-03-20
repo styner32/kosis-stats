@@ -6,3 +6,8 @@
 ## 2026-03-13 - [Wildcard CORS + reflect Origin + credentials]
 **Vulnerability:** Treating `ALLOWED_ORIGINS=*` by reflecting the request `Origin` and setting `Access-Control-Allow-Credentials: true` is worse than `*` + credentials (browsers reject the latter). Reflected origin + credentials is accepted, so any site could perform credentialed cross-origin requests.
 **Prevention:** If open CORS is required, use literal `Access-Control-Allow-Origin: *` and omit `Access-Control-Allow-Credentials`. For cookies/auth cross-origin, use an explicit origin allowlist and reflect only listed origins.
+
+## 2024-05-18 - [GORM Negative Limit Pagination DoS]
+**Vulnerability:** GORM interprets `Limit(-1)` and any negative limits as "no limit", fetching the entire database table. User-provided pagination arguments like `?limit=-1` weren't validated, leading to potential memory exhaustion and DoS.
+**Learning:** External inputs mapped directly to ORM methods (like Limit/Offset) can cause severe performance issues or DoS. Always define boundaries.
+**Prevention:** Strictly validate and clamp pagination limits between sensible minimum (> 0) and maximum (e.g., 100) bounds before passing them to GORM.
