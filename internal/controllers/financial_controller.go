@@ -47,6 +47,8 @@ type ReportSummaryResponse struct {
 	RawReport     string          `json:"raw_report"`
 }
 
+const maxPageLimit = 100
+
 // GetCompanies returns a list of all companies
 func (fc *FinancialController) GetCompanies(c *gin.Context) {
 	ctx := c.Request.Context()
@@ -315,6 +317,14 @@ func getLimitWithDefault(c *gin.Context, defaultValue int) int {
 			log.Printf("failed to parse limit: %v, using default value: %d", err, defaultValue)
 			return defaultValue
 		}
+
+		if limit <= 0 {
+			return defaultValue
+		}
+		if limit > maxPageLimit {
+			return maxPageLimit
+		}
 	}
+
 	return limit
 }
