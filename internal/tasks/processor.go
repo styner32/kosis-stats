@@ -52,6 +52,7 @@ func (p *TaskProcessor) HandleFetchReportsTask(ctx context.Context, t *asynq.Tas
 	}
 
 	totalUsedTokens := int64(0)
+	var analyses []models.Analysis
 	for _, rawReport := range rawReports {
 		count, err := gorm.G[models.RawReport](p.DB).Where("receipt_number = ?", rawReport.RceptNo).Count(ctx, "id")
 		if err != nil {
@@ -166,21 +167,28 @@ func (p *TaskProcessor) HandleFetchReportsTask(ctx context.Context, t *asynq.Tas
 			continue
 		}
 
-		result = gorm.WithResult()
-		err = gorm.G[models.Analysis](p.DB, result).Create(ctx, &models.Analysis{
+		analyses = append(analyses, models.Analysis{
 			RawReportID: rawReport.ID,
 			UsedTokens:  usedTokens,
 			Analysis:    analysisJSON,
 		})
-		if err != nil {
-			return err
-		}
 
-		log.Printf("stored raw report: %s, %s, %d, %d", rawReport.ReceiptNumber, rawReport.CorpCode, rawReport.BlobSize, usedTokens)
+		log.Printf("processed raw report: %s, %s, %d, %d", rawReport.ReceiptNumber, rawReport.CorpCode, rawReport.BlobSize, usedTokens)
 
 		totalUsedTokens += usedTokens
 
 		log.Printf("total used tokens: %d", totalUsedTokens)
+	}
+
+	if len(analyses) > 0 {
+		log.Printf("storing %d analyses in batch", len(analyses))
+		result := gorm.WithResult()
+		err := gorm.G[models.Analysis](p.DB, result).Create(ctx, &analyses)
+		if err != nil {
+			log.Printf("failed to store analyses in batch: %v", err)
+			return err
+		}
+		log.Printf("successfully stored %d analyses in batch", len(analyses))
 	}
 
 	log.Println("Reports fetched successfully")
