@@ -584,5 +584,35 @@ var _ = Describe("FinancialController", func() {
 			Expect(json.Unmarshal(resp.Body.Bytes(), &body)).To(Succeed())
 			Expect(body.Reports).To(HaveLen(2))
 		})
+
+		It("prevents negative limit parameter (DoS vulnerability)", func() {
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/mcp/reports/by-corp-name?corp_name=Alpha&limit=-1", nil)
+			resp := httptest.NewRecorder()
+
+			router.ServeHTTP(resp, req)
+
+			Expect(resp.Code).To(Equal(http.StatusOK))
+
+			var body struct {
+				Reports []models.RawReport `json:"reports"`
+			}
+			Expect(json.Unmarshal(resp.Body.Bytes(), &body)).To(Succeed())
+			Expect(len(body.Reports)).To(BeNumerically("<=", 10)) // Should fall back to default limit
+		})
+
+		It("caps excessively large limit parameters", func() {
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/mcp/reports/by-corp-name?corp_name=Alpha&limit=1000", nil)
+			resp := httptest.NewRecorder()
+
+			router.ServeHTTP(resp, req)
+
+			Expect(resp.Code).To(Equal(http.StatusOK))
+
+			var body struct {
+				Reports []models.RawReport `json:"reports"`
+			}
+			Expect(json.Unmarshal(resp.Body.Bytes(), &body)).To(Succeed())
+			Expect(len(body.Reports)).To(BeNumerically("<=", 100)) // Capped at 100
+		})
 	})
 })
