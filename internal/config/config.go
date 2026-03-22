@@ -8,11 +8,11 @@ import (
 
 // Config holds all configuration for the application
 type Config struct {
-	DatabaseURL    string // Consolidated DB Connection URL
-	RedisURL       string
-	DartAPIKey     string
-	KosisAPIKey    string
-	OpenAIAPIKey   string
+	DatabaseURL  string // Consolidated DB Connection URL
+	RedisURL     string
+	DartAPIKey   string
+	KosisAPIKey  string
+	OpenAIAPIKey string
 	// Comma-separated origins, or exactly "*" for open CORS (no credentials). For credentialed CORS, list explicit origins only.
 	AllowedOrigins string
 }
