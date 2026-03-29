@@ -49,7 +49,10 @@ func New(apiKey string) *FREDClient {
 
 func (c *FREDClient) GetHighYieldSpread() (map[string]float64, error) {
 	url := fmt.Sprintf("%s/fred/series/observations?series_id=BAMLH0A0HYM2&api_key=%s&file_type=json", baseURL, c.apiKey)
-	resp, err := http.Get(url)
+
+	// Security: Use custom initialized c.client with timeout instead of default http.Get
+	// to prevent resource exhaustion from hanging connections.
+	resp, err := c.client.Get(url)
 	if err != nil {
 		log.Printf("Error fetching data: %v", err)
 		return nil, err
