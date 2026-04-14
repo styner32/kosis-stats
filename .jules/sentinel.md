@@ -14,3 +14,9 @@
 **Vulnerability:** The application used a query parameter to dynamically set database limits in `getLimitWithDefault()`, but did not validate that the limit was strictly positive and adequately bounded. GORM treats a negative limit (like `-1`) as "no limit", which an attacker could use to bypass pagination and fetch an excessively large dataset into memory, causing Denial of Service (DoS) or Out of Memory (OOM) errors.
 **Learning:** Object Relational Mappers (ORMs) like GORM have specific behaviors regarding default or special numeric arguments. In this case, passing negative values disables limits. It highlights the importance of not just capping the maximum value, but verifying lower bounds.
 **Prevention:** Always ensure pagination limit parameters are explicitly bounded to a strictly positive range (e.g., `0 < limit <= MAX_LIMIT`) before passing them to ORMs or database engines.
+
+## 2026-04-14 - [Default HTTP Client Timeout Resource Exhaustion]
+
+**Vulnerability:** External API calls were using the package-level default `http.Get()` which does not have an explicit timeout. If the external API hangs or responds slowly, this can exhaust all available threads/connections and lead to a Denial of Service (DoS).
+**Learning:** The default `http.Client` in Go does not enforce connection or request timeouts. Relying on default HTTP methods for external network requests is a common pitfall that enables resource starvation vulnerabilities.
+**Prevention:** Always use a custom `http.Client` explicitly configured with a strict `Timeout` duration for all outgoing external HTTP requests, and ensure that custom client instance is actually used (e.g., `client.Get()` instead of `http.Get()`).
