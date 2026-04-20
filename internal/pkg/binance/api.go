@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const baseURL = "https://api.binance.com"
@@ -21,7 +22,12 @@ func GetCryptoRSI(crypto string) (float64, error) {
 
 	symbol := fmt.Sprintf("%sUSDT", strings.ToUpper(crypto))
 	url := fmt.Sprintf("%s/api/v3/klines?symbol=%s&interval=4h&limit=100", baseURL, symbol)
-	resp, err := http.Get(url)
+
+	// Security: Use custom client with timeout to prevent DoS via resource exhaustion
+	client := &http.Client{
+		Timeout: 20 * time.Second,
+	}
+	resp, err := client.Get(url)
 	if err != nil {
 		log.Printf("Error fetching data: %v", err)
 		return 0, err
