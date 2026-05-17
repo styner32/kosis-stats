@@ -14,3 +14,8 @@
 **Vulnerability:** The application used a query parameter to dynamically set database limits in `getLimitWithDefault()`, but did not validate that the limit was strictly positive and adequately bounded. GORM treats a negative limit (like `-1`) as "no limit", which an attacker could use to bypass pagination and fetch an excessively large dataset into memory, causing Denial of Service (DoS) or Out of Memory (OOM) errors.
 **Learning:** Object Relational Mappers (ORMs) like GORM have specific behaviors regarding default or special numeric arguments. In this case, passing negative values disables limits. It highlights the importance of not just capping the maximum value, but verifying lower bounds.
 **Prevention:** Always ensure pagination limit parameters are explicitly bounded to a strictly positive range (e.g., `0 < limit <= MAX_LIMIT`) before passing them to ORMs or database engines.
+
+## 2025-03-03 - [Missing HTTP Client Timeout in FRED API]
+**Vulnerability:** The `FREDClient.GetHighYieldSpread` method used the default `http.Get`, ignoring the custom `http.Client` initialized with a 20-second timeout.
+**Learning:** Even when a secure custom client is configured in a constructor, developers may accidentally use the package-level `http.Get`, leading to potential resource exhaustion (DoS) if the external API hangs.
+**Prevention:** Always ensure custom `http.Client` instances are actually used (`c.client.Get`) instead of the default `http.Get`. Consider using linters like `gosec` to catch usage of default HTTP clients.
