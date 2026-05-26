@@ -14,3 +14,9 @@
 **Vulnerability:** The application used a query parameter to dynamically set database limits in `getLimitWithDefault()`, but did not validate that the limit was strictly positive and adequately bounded. GORM treats a negative limit (like `-1`) as "no limit", which an attacker could use to bypass pagination and fetch an excessively large dataset into memory, causing Denial of Service (DoS) or Out of Memory (OOM) errors.
 **Learning:** Object Relational Mappers (ORMs) like GORM have specific behaviors regarding default or special numeric arguments. In this case, passing negative values disables limits. It highlights the importance of not just capping the maximum value, but verifying lower bounds.
 **Prevention:** Always ensure pagination limit parameters are explicitly bounded to a strictly positive range (e.g., `0 < limit <= MAX_LIMIT`) before passing them to ORMs or database engines.
+
+## 2026-05-26 - [Missing Timeouts on External HTTP Calls]
+
+**Vulnerability:** The codebase was found using the default `http.Get()` in API client functions (like `GetHighYieldSpread`). The default HTTP client does not configure any timeouts. If the external API hangs or responds extremely slowly, the connection will stay open indefinitely, leading to resource exhaustion (DoS) via goroutine and file descriptor leaks.
+**Learning:** Default global HTTP functions in Go (e.g., `http.Get`, `http.Post`) should never be used in production applications making outbound requests to third parties due to their lack of bounds/timeouts. Even when a struct wraps a custom `http.Client` with timeouts configured, it's easy to accidentally call the package-level `http.Get` instead of the custom receiver (`c.client.Get`).
+**Prevention:** Always instantiate a custom `http.Client` with explicit `Timeout` values set and strictly enforce its use over package-level defaults. Consider linters like `gosec` or `bodyclose` to detect usages of default clients.
