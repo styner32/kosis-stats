@@ -14,3 +14,8 @@
 **Vulnerability:** The application used a query parameter to dynamically set database limits in `getLimitWithDefault()`, but did not validate that the limit was strictly positive and adequately bounded. GORM treats a negative limit (like `-1`) as "no limit", which an attacker could use to bypass pagination and fetch an excessively large dataset into memory, causing Denial of Service (DoS) or Out of Memory (OOM) errors.
 **Learning:** Object Relational Mappers (ORMs) like GORM have specific behaviors regarding default or special numeric arguments. In this case, passing negative values disables limits. It highlights the importance of not just capping the maximum value, but verifying lower bounds.
 **Prevention:** Always ensure pagination limit parameters are explicitly bounded to a strictly positive range (e.g., `0 < limit <= MAX_LIMIT`) before passing them to ORMs or database engines.
+## 2025-10-23 - [Binance API Default HTTP Client Timeout]
+
+**Vulnerability:** In `internal/pkg/binance/api.go`, `http.Get(url)` was used without any timeout configured. The default Go `http.Client` lacks timeouts, which leaves the application vulnerable to resource exhaustion (DoS) and memory leaks if the external Binance API hangs or responds too slowly.
+**Learning:** Default HTTP clients in Go (`http.Get`, `http.Post`, etc.) are dangerous for production use because they default to no timeout. This can cause the calling goroutine to hang indefinitely. This same pattern was previously resolved in `internal/pkg/fred/api.go`, proving it was a broader systemic issue.
+**Prevention:** Always initialize a custom `&http.Client{}` with an explicit `Timeout` configuration for all external API requests. Avoid using package-level default `http` methods.
