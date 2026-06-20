@@ -150,6 +150,9 @@ func (c *DartClient) GetDocument(rceptNo string) (string, error) {
 		return "", err
 	}
 
+	const maxDecompressedSize = 100 * 1024 * 1024 // 100MB limit
+	var totalRead int64
+
 	outBuf := new(bytes.Buffer)
 	for _, f := range zr.File {
 		rc, err := f.Open()
@@ -157,11 +160,17 @@ func (c *DartClient) GetDocument(rceptNo string) (string, error) {
 			return "", err
 		}
 
-		_, err = io.Copy(outBuf, rc)
+		// Security: Prevent Zip Bomb / memory exhaustion
+		n, err := io.Copy(outBuf, io.LimitReader(rc, maxDecompressedSize-totalRead))
+		rc.Close()
 		if err != nil {
 			return "", err
 		}
-		rc.Close()
+
+		totalRead += n
+		if totalRead >= maxDecompressedSize {
+			return "", fmt.Errorf("decompressed size exceeds limit")
+		}
 	}
 
 	return outBuf.String(), nil
@@ -235,6 +244,9 @@ func (c *DartClient) GetCompanies() ([]Company, error) {
 		return nil, err
 	}
 
+	const maxDecompressedSize = 100 * 1024 * 1024 // 100MB limit
+	var totalRead int64
+
 	outBuf := new(bytes.Buffer)
 	for _, f := range zr.File {
 		rc, err := f.Open()
@@ -242,11 +254,17 @@ func (c *DartClient) GetCompanies() ([]Company, error) {
 			return nil, err
 		}
 
-		_, err = io.Copy(outBuf, rc)
+		// Security: Prevent Zip Bomb / memory exhaustion
+		n, err := io.Copy(outBuf, io.LimitReader(rc, maxDecompressedSize-totalRead))
 		rc.Close()
 
 		if err != nil {
 			return nil, err
+		}
+
+		totalRead += n
+		if totalRead >= maxDecompressedSize {
+			return nil, fmt.Errorf("decompressed size exceeds limit")
 		}
 	}
 
