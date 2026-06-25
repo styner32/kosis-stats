@@ -14,3 +14,8 @@
 **Vulnerability:** The application used a query parameter to dynamically set database limits in `getLimitWithDefault()`, but did not validate that the limit was strictly positive and adequately bounded. GORM treats a negative limit (like `-1`) as "no limit", which an attacker could use to bypass pagination and fetch an excessively large dataset into memory, causing Denial of Service (DoS) or Out of Memory (OOM) errors.
 **Learning:** Object Relational Mappers (ORMs) like GORM have specific behaviors regarding default or special numeric arguments. In this case, passing negative values disables limits. It highlights the importance of not just capping the maximum value, but verifying lower bounds.
 **Prevention:** Always ensure pagination limit parameters are explicitly bounded to a strictly positive range (e.g., `0 < limit <= MAX_LIMIT`) before passing them to ORMs or database engines.
+
+## 2024-05-27 - [MEDIUM] Fix resource exhaustion vulnerability in FRED client
+**Vulnerability:** The FRED API client (`internal/pkg/fred/api.go`) used the default package-level `http.Get`, which does not have a timeout configured.
+**Learning:** Default HTTP methods like `http.Get` in Go lack timeouts and can cause resource exhaustion (Denial of Service) if external APIs hang indefinitely. While there was a custom configured `c.client` with a timeout, it was not being utilized correctly.
+**Prevention:** Always ensure that custom HTTP clients with explicitly defined timeouts (e.g., `&http.Client{Timeout: 20 * time.Second}`) are invoked (e.g., `c.client.Get(url)`) instead of using the default package-level methods.
