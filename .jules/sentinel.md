@@ -14,3 +14,8 @@
 **Vulnerability:** The application used a query parameter to dynamically set database limits in `getLimitWithDefault()`, but did not validate that the limit was strictly positive and adequately bounded. GORM treats a negative limit (like `-1`) as "no limit", which an attacker could use to bypass pagination and fetch an excessively large dataset into memory, causing Denial of Service (DoS) or Out of Memory (OOM) errors.
 **Learning:** Object Relational Mappers (ORMs) like GORM have specific behaviors regarding default or special numeric arguments. In this case, passing negative values disables limits. It highlights the importance of not just capping the maximum value, but verifying lower bounds.
 **Prevention:** Always ensure pagination limit parameters are explicitly bounded to a strictly positive range (e.g., `0 < limit <= MAX_LIMIT`) before passing them to ORMs or database engines.
+
+## 2026-03-24 - [Zip Bomb Vulnerability during Zip Extraction]
+**Vulnerability:** The application unzips files directly into memory using `io.Copy(outBuf, rc)` without bounding the total output size. An attacker could exploit this by providing a Zip bomb, causing Denial of Service (DoS) and Out Of Memory (OOM) errors.
+**Learning:** Using `io.Copy` to read from an untrusted archive straight into memory allows memory exhaustion. Limits must be placed dynamically based on already decompressed data.
+**Prevention:** To prevent Zip Bomb vulnerabilities, wrap the `io.Reader` using `io.LimitReader`, and maintain a running count of total bytes extracted across all files within an archive to enforce a strict overall limit.

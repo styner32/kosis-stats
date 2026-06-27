@@ -151,17 +151,27 @@ func (c *DartClient) GetDocument(rceptNo string) (string, error) {
 	}
 
 	outBuf := new(bytes.Buffer)
+	var totalRead int64
+	const maxDecompressedSize = 100 * 1024 * 1024 // 100MB limit to prevent zip bombs
+
 	for _, f := range zr.File {
 		rc, err := f.Open()
 		if err != nil {
 			return "", err
 		}
 
-		_, err = io.Copy(outBuf, rc)
+		lr := io.LimitReader(rc, maxDecompressedSize-totalRead+1)
+		n, err := io.Copy(outBuf, lr)
+		rc.Close()
+
 		if err != nil {
 			return "", err
 		}
-		rc.Close()
+
+		totalRead += n
+		if totalRead > maxDecompressedSize {
+			return "", fmt.Errorf("decompressed data exceeds limit")
+		}
 	}
 
 	return outBuf.String(), nil
