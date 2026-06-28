@@ -14,7 +14,14 @@
 **Vulnerability:** The application used a query parameter to dynamically set database limits in `getLimitWithDefault()`, but did not validate that the limit was strictly positive and adequately bounded. GORM treats a negative limit (like `-1`) as "no limit", which an attacker could use to bypass pagination and fetch an excessively large dataset into memory, causing Denial of Service (DoS) or Out of Memory (OOM) errors.
 **Learning:** Object Relational Mappers (ORMs) like GORM have specific behaviors regarding default or special numeric arguments. In this case, passing negative values disables limits. It highlights the importance of not just capping the maximum value, but verifying lower bounds.
 **Prevention:** Always ensure pagination limit parameters are explicitly bounded to a strictly positive range (e.g., `0 < limit <= MAX_LIMIT`) before passing them to ORMs or database engines.
+
 ## 2026-06-29 - [Missing HTTP Timeout in API Clients]
+
 **Vulnerability:** External HTTP API requests (e.g., to FRED, Binance) used the default `http.Get` function without an explicit timeout configured.
 **Learning:** The default package-level `http.Get`, `http.Post`, etc., do not enforce any timeouts. If the external server hangs or responds very slowly, the connection will remain open indefinitely. In a concurrent environment, this can lead to thread/goroutine exhaustion, file descriptor limits being reached, and ultimately a Denial of Service (DoS) of the application.
 **Prevention:** Always use a custom instantiated `http.Client` with a strictly defined `Timeout` property (e.g., `&http.Client{Timeout: 10 * time.Second}`) when interacting with external networks. Avoid the default `http` package convenience functions.
+
+## 2024-05-24 - [Zip Bomb Vulnerability in DART Archive Extraction]
+**Vulnerability:** The application unzipped files directly into memory without bounding the aggregate size of decompressed data across the archive. This made it vulnerable to decompression bomb (Zip Bomb) attacks leading to memory exhaustion (OOM) or Denial of Service (DoS).
+**Learning:** Even when processing data from seemingly trusted third-party APIs like DART, we must assume the input data format could be malformed or exploited. Decompressing archives without tracking the cumulative bytes read is dangerous.
+**Prevention:** Always use `io.LimitReader` and track the total bytes decompressed against a strict limit (e.g., 100MB) when extracting archives, returning an error if the limit is exceeded.

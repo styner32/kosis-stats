@@ -150,6 +150,12 @@ func (c *DartClient) GetDocument(rceptNo string) (string, error) {
 		return "", err
 	}
 
+	// SECURITY: Prevent Zip Bomb / memory exhaustion by limiting decompressed data to 100MB across all files
+	if len(zr.File) > 100 {
+		return "", fmt.Errorf("too many files in archive")
+	}
+
+	remainingBytes := int64(100 * 1024 * 1024)
 	outBuf := new(bytes.Buffer)
 	for _, f := range zr.File {
 		rc, err := f.Open()
@@ -157,11 +163,17 @@ func (c *DartClient) GetDocument(rceptNo string) (string, error) {
 			return "", err
 		}
 
-		_, err = io.Copy(outBuf, rc)
+		limitReader := io.LimitReader(rc, remainingBytes+1)
+		copied, err := io.Copy(outBuf, limitReader)
+		rc.Close()
+
+		if copied > remainingBytes {
+			return "", fmt.Errorf("decompressed data exceeds maximum allowed size")
+		}
 		if err != nil {
 			return "", err
 		}
-		rc.Close()
+		remainingBytes -= copied
 	}
 
 	return outBuf.String(), nil
@@ -235,6 +247,11 @@ func (c *DartClient) GetCompanies() ([]Company, error) {
 		return nil, err
 	}
 
+	// SECURITY: Prevent Zip Bomb / memory exhaustion by limiting decompressed data to 100MB across all files
+	if len(zr.File) > 100 {
+		return nil, fmt.Errorf("too many files in archive")
+	}
+	remainingBytes := int64(100 * 1024 * 1024)
 	outBuf := new(bytes.Buffer)
 	for _, f := range zr.File {
 		rc, err := f.Open()
@@ -242,12 +259,17 @@ func (c *DartClient) GetCompanies() ([]Company, error) {
 			return nil, err
 		}
 
-		_, err = io.Copy(outBuf, rc)
+		limitReader := io.LimitReader(rc, remainingBytes+1)
+		copied, err := io.Copy(outBuf, limitReader)
 		rc.Close()
 
+		if copied > remainingBytes {
+			return nil, fmt.Errorf("decompressed data exceeds maximum allowed size")
+		}
 		if err != nil {
 			return nil, err
 		}
+		remainingBytes -= copied
 	}
 
 	dec := xml.NewDecoder(bytes.NewReader(outBuf.Bytes()))
