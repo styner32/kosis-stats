@@ -305,20 +305,12 @@ func (c *Client) makeRequest(url string, resBody interface{}) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return fmt.Errorf("kosis http %d: failed to read error body: %w", resp.StatusCode, err)
-		}
 		errBody := &KosisSearchErrorResponse{}
-		if err := json.Unmarshal(body, errBody); err != nil {
-			return fmt.Errorf("kosis http %d: %s", resp.StatusCode, string(body))
+		if err := json.NewDecoder(resp.Body).Decode(errBody); err != nil {
+			return err
 		}
 		return fmt.Errorf("%s: %s", errBody.Err, errBody.ErrMsg)
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(resBody); err != nil {
-		return err
-	}
-
-	return nil
+	return json.NewDecoder(resp.Body).Decode(resBody)
 }
