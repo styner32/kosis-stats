@@ -2,6 +2,7 @@ package fred
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -48,8 +49,13 @@ func New(apiKey string) *FREDClient {
 }
 
 func (c *FREDClient) GetHighYieldSpread() (map[string]float64, error) {
+	if c.client == nil {
+		return nil, errors.New("Client not initialized")
+	}
+
 	url := fmt.Sprintf("%s/fred/series/observations?series_id=BAMLH0A0HYM2&api_key=%s&file_type=json", baseURL, c.apiKey)
-	resp, err := http.Get(url)
+	// SECURITY: Use custom client with explicit timeout to prevent DoS (resource exhaustion) if the external API hangs.
+	resp, err := c.client.Get(url)
 	if err != nil {
 		log.Printf("Error fetching data: %v", err)
 		return nil, err
