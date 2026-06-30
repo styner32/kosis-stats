@@ -25,3 +25,9 @@
 **Vulnerability:** The application unzipped files directly into memory without bounding the aggregate size of decompressed data across the archive. This made it vulnerable to decompression bomb (Zip Bomb) attacks leading to memory exhaustion (OOM) or Denial of Service (DoS).
 **Learning:** Even when processing data from seemingly trusted third-party APIs like DART, we must assume the input data format could be malformed or exploited. Decompressing archives without tracking the cumulative bytes read is dangerous.
 **Prevention:** Always use `io.LimitReader` and track the total bytes decompressed against a strict limit (e.g., 100MB) when extracting archives, returning an error if the limit is exceeded.
+
+## 2024-05-18 - [DoS Vulnerability in Default HTTP Client]
+
+**Vulnerability:** Usage of the default `http.Get` which implicitly uses `http.DefaultClient`. The default client lacks a timeout. If the external server hangs, connections can stay open indefinitely leading to goroutine leaks and resource exhaustion (DoS).
+**Learning:** Default HTTP clients in Go are unsuitable for production code when interacting with external networks. Timeouts must always be explicitly configured.
+**Prevention:** Always instantiate a custom `http.Client` with an explicit `Timeout` (e.g., `client := &http.Client{Timeout: 10 * time.Second}`) instead of relying on package-level HTTP functions.
