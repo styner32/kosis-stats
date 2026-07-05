@@ -62,14 +62,11 @@ func (c *FREDClient) GetHighYieldSpread() (map[string]float64, error) {
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
 	res := &HighYieldSpreadResponse{}
 
-	if err := json.Unmarshal(body, &res); err != nil {
+	// SECURITY: Stream JSON parsing with a limit to avoid Out Of Memory (OOM) vulnerabilities on large responses.
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 100*1024*1024)).Decode(&res); err != nil {
+		log.Printf("failed to decode FRED response, err: %v", err)
 		return nil, err
 	}
 
