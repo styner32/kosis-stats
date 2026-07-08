@@ -343,7 +343,8 @@ func (a *FileAnalyzer) analyzeReportWithBatch(ctx context.Context, contents stri
 	}
 	defer outputResp.Body.Close()
 
-	outputData, err := io.ReadAll(outputResp.Body)
+	// 🛡️ Security: Bounded read to prevent OOM/DoS from large output files (100MB limit)
+	outputData, err := io.ReadAll(io.LimitReader(outputResp.Body, 100*1024*1024))
 	if err != nil {
 		return nil, 0, fmt.Errorf("read batch output: %w", err)
 	}
