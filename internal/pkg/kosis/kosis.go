@@ -105,12 +105,16 @@ func (c *Client) get(path string, q url.Values, v any) error {
 	}
 	defer resp.Body.Close()
 
+	// SECURITY: Use io.LimitReader to prevent Out Of Memory (OOM) vulnerabilities from unbounded responses.
+	const maxBodySize = 100 * 1024 * 1024 // 100MB limit
+	limitedBody := io.LimitReader(resp.Body, maxBodySize)
+
 	if resp.StatusCode >= 400 {
-		b, _ := io.ReadAll(resp.Body)
+		b, _ := io.ReadAll(limitedBody)
 		return fmt.Errorf("kosis http %d: %s", resp.StatusCode, string(b))
 	}
 
-	return json.NewDecoder(resp.Body).Decode(v)
+	return json.NewDecoder(limitedBody).Decode(v)
 }
 
 type TableRef struct {
