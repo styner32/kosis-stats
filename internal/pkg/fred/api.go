@@ -62,14 +62,10 @@ func (c *FREDClient) GetHighYieldSpread() (map[string]float64, error) {
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
 	res := &HighYieldSpreadResponse{}
-
-	if err := json.Unmarshal(body, &res); err != nil {
+	// SECURITY: Use io.LimitReader to prevent OOM/DoS vulnerabilities from unbounded HTTP responses.
+	limitReader := io.LimitReader(resp.Body, 100*1024*1024)
+	if err := json.NewDecoder(limitReader).Decode(res); err != nil {
 		return nil, err
 	}
 
