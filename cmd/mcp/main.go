@@ -375,7 +375,8 @@ func (s *MCPServer) callReportsByCorpName(args map[string]interface{}) (*ToolCal
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	// SECURITY: Prevent OOM/DoS vulnerabilities from unbounded HTTP responses
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 100*1024*1024)) // 100MB limit
 	if err != nil {
 		return nil, &ResponseError{Code: -32000, Message: "failed to read response", Data: err.Error()}
 	}
@@ -481,7 +482,8 @@ func (s *MCPServer) callReportsSummaryAllCompanies(args map[string]interface{}) 
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	// SECURITY: Prevent OOM/DoS vulnerabilities from unbounded HTTP responses
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 100*1024*1024)) // 100MB limit
 	if err != nil {
 		return nil, &ResponseError{Code: -32000, Message: "failed to read response", Data: err.Error()}
 	}
@@ -533,7 +535,8 @@ func (s *MCPServer) callReportsSummaryAndRawByReceiptNumber(args map[string]inte
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	// SECURITY: Prevent OOM/DoS vulnerabilities from unbounded HTTP responses
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 100*1024*1024)) // 100MB limit
 	if err != nil {
 		return nil, &ResponseError{Code: -32000, Message: "failed to read response", Data: err.Error()}
 	}
