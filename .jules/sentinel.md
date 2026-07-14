@@ -31,3 +31,13 @@
 **Vulnerability:** Usage of the default `http.Get` which implicitly uses `http.DefaultClient`. The default client lacks a timeout. If the external server hangs, connections can stay open indefinitely leading to goroutine leaks and resource exhaustion (DoS).
 **Learning:** Default HTTP clients in Go are unsuitable for production code when interacting with external networks. Timeouts must always be explicitly configured.
 **Prevention:** Always instantiate a custom `http.Client` with an explicit `Timeout` (e.g., `client := &http.Client{Timeout: 10 * time.Second}`) instead of relying on package-level HTTP functions.
+## 2024-07-14 - [OOM/DoS Vulnerability in MCP HTTP Client]
+
+**Vulnerability:** Unbounded reading of HTTP response bodies using `io.ReadAll` in the MCP server can lead to Out-Of-Memory (OOM) errors and Denial of Service (DoS) attacks if a malicious or compromised upstream server returns an exceptionally large response.
+**Learning:** Even internal or semi-internal API communication paths can be vulnerable if response limits are not bounded. Using `io.ReadAll` directly on HTTP response bodies is dangerous without upstream guarantees.
+**Prevention:** Always bound the read on external or uncontrolled HTTP bodies using `io.LimitReader(resp.Body, maxBytes)` before reading the data to prevent excessive memory allocation.
+## 2024-07-14 - [Silent Payloads Truncation via LimitReader]
+
+**Vulnerability:** Using `io.LimitReader` to bound HTTP responses and `io.ReadAll` leads to silent data truncation. When the limit is reached, it returns `EOF` indicating a successful stream completion. As a result, the application processes partial data as valid, which could crash the JSON parser or silently corrupt records.
+**Learning:** For HTTP bodies, you must use `http.MaxBytesReader(nil, resp.Body, limit)` instead of `io.LimitReader`. It safely returns an explicit non-EOF error (typically `http.ErrBodyReadAfterClose`) instead of a silent success when the limit is reached.
+**Prevention:** Always use `http.MaxBytesReader` for reading external HTTP bodies where failure and erroring out explicitly is required on oversized payloads.
