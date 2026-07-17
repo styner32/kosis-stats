@@ -127,6 +127,9 @@ func (c *DartClient) GetDocument(rceptNo string) (string, error) {
 	}
 	defer resp.Body.Close()
 
+	// SECURITY: Bound HTTP response body to 100MB to prevent OOM/DoS vulnerability
+	// using http.MaxBytesReader instead of io.LimitReader to avoid silent truncation.
+	resp.Body = http.MaxBytesReader(nil, resp.Body, 100*1024*1024)
 	buf, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", err
