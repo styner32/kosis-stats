@@ -31,3 +31,9 @@
 **Vulnerability:** Usage of the default `http.Get` which implicitly uses `http.DefaultClient`. The default client lacks a timeout. If the external server hangs, connections can stay open indefinitely leading to goroutine leaks and resource exhaustion (DoS).
 **Learning:** Default HTTP clients in Go are unsuitable for production code when interacting with external networks. Timeouts must always be explicitly configured.
 **Prevention:** Always instantiate a custom `http.Client` with an explicit `Timeout` (e.g., `client := &http.Client{Timeout: 10 * time.Second}`) instead of relying on package-level HTTP functions.
+
+## 2024-05-24 - [Unbounded HTTP Response Read in KOSIS API]
+
+**Vulnerability:** The KOSIS API client (`internal/pkg/kosis/kosis.go`) was making HTTP requests and reading the response body via `io.ReadAll` and `json.NewDecoder` without imposing any maximum size limits on the data being read.
+**Learning:** This exposes the application to Denial of Service (DoS) and Out-Of-Memory (OOM) vulnerabilities. If an attacker could influence the upstream request, or if the upstream API misbehaved and returned a massive, non-terminating payload, the unbounded read would cause the Go runtime to consume all available memory and crash.
+**Prevention:** As a defense-in-depth measure, always wrap untrusted response bodies with `http.MaxBytesReader` (e.g., `resp.Body = http.MaxBytesReader(nil, resp.Body, 100*1024*1024)`) immediately after checking for errors and deferring the body closure, before attempting to parse or read the contents.
