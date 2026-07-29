@@ -127,7 +127,9 @@ func (c *DartClient) GetDocument(rceptNo string) (string, error) {
 	}
 	defer resp.Body.Close()
 
-	buf, err := io.ReadAll(resp.Body)
+	// SECURITY: Prevent OOM/DoS by bounding the response body to 100MB
+	limitReader := http.MaxBytesReader(nil, resp.Body, 100*1024*1024)
+	buf, err := io.ReadAll(limitReader)
 	if err != nil {
 		return "", err
 	}
@@ -233,7 +235,9 @@ func (c *DartClient) GetCompanies() ([]Company, error) {
 	}
 	defer resp.Body.Close()
 
-	buf, err := io.ReadAll(resp.Body)
+	// SECURITY: Prevent OOM/DoS by bounding the response body to 100MB
+	limitReader := http.MaxBytesReader(nil, resp.Body, 100*1024*1024)
+	buf, err := io.ReadAll(limitReader)
 	if err != nil {
 		return nil, err
 	}
