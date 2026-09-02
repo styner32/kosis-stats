@@ -31,3 +31,8 @@
 **Vulnerability:** Usage of the default `http.Get` which implicitly uses `http.DefaultClient`. The default client lacks a timeout. If the external server hangs, connections can stay open indefinitely leading to goroutine leaks and resource exhaustion (DoS).
 **Learning:** Default HTTP clients in Go are unsuitable for production code when interacting with external networks. Timeouts must always be explicitly configured.
 **Prevention:** Always instantiate a custom `http.Client` with an explicit `Timeout` (e.g., `client := &http.Client{Timeout: 10 * time.Second}`) instead of relying on package-level HTTP functions.
+
+## 2025-02-14 - Fix unbounded HTTP response reads in dart package
+**Vulnerability:** Unbounded `io.ReadAll` and `json.NewDecoder` used for external HTTP API calls in `internal/pkg/dart/dart.go`, risking Out-Of-Memory (OOM) and Denial of Service (DoS) attacks if responses are large.
+**Learning:** Found remaining vulnerable patterns in the DART API client despite previous fixes elsewhere.
+**Prevention:** Always wrap `resp.Body` with `http.MaxBytesReader` before decoding or reading in API clients to enforce size limits (e.g., 100MB).
