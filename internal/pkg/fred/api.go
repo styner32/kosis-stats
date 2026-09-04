@@ -62,7 +62,9 @@ func (c *FREDClient) GetHighYieldSpread() (map[string]float64, error) {
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	// SECURITY: Use http.MaxBytesReader to bound the response size and prevent Out-Of-Memory (OOM) DoS vulnerabilities from unbounded responses.
+	boundedReader := http.MaxBytesReader(nil, resp.Body, 100*1024*1024)
+	body, err := io.ReadAll(boundedReader)
 	if err != nil {
 		return nil, err
 	}
