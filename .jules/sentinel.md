@@ -31,3 +31,8 @@
 **Vulnerability:** Usage of the default `http.Get` which implicitly uses `http.DefaultClient`. The default client lacks a timeout. If the external server hangs, connections can stay open indefinitely leading to goroutine leaks and resource exhaustion (DoS).
 **Learning:** Default HTTP clients in Go are unsuitable for production code when interacting with external networks. Timeouts must always be explicitly configured.
 **Prevention:** Always instantiate a custom `http.Client` with an explicit `Timeout` (e.g., `client := &http.Client{Timeout: 10 * time.Second}`) instead of relying on package-level HTTP functions.
+
+## 2024-05-25 - [Unbounded HTTP Response Read OOM/DoS]
+**Vulnerability:** The MCP server used `io.ReadAll` directly on HTTP response bodies without bounding the size, which could lead to Out-Of-Memory (OOM) or Denial of Service (DoS) vulnerabilities if an upstream server returns a maliciously or unexpectedly large payload.
+**Learning:** When fetching data from external or upstream services, one must assume the response payload might be unbounded. Using unbounded reads like `io.ReadAll` directly is unsafe.
+**Prevention:** Always bound the read stream using `http.MaxBytesReader(nil, resp.Body, limit)` before reading from response bodies, or use chunked/streaming parsers for very large data.
