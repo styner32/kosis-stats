@@ -37,7 +37,8 @@ func GetCryptoRSI(crypto string) (float64, error) {
 	defer resp.Body.Close()
 
 	var klines [][]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&klines); err != nil {
+	// SECURITY: Limit JSON payload size to prevent OOM/DoS from unbounded responses
+	if err := json.NewDecoder(http.MaxBytesReader(nil, resp.Body, 10*1024*1024)).Decode(&klines); err != nil {
 		return 0, err
 	}
 

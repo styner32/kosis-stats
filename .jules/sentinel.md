@@ -31,3 +31,8 @@
 **Vulnerability:** Usage of the default `http.Get` which implicitly uses `http.DefaultClient`. The default client lacks a timeout. If the external server hangs, connections can stay open indefinitely leading to goroutine leaks and resource exhaustion (DoS).
 **Learning:** Default HTTP clients in Go are unsuitable for production code when interacting with external networks. Timeouts must always be explicitly configured.
 **Prevention:** Always instantiate a custom `http.Client` with an explicit `Timeout` (e.g., `client := &http.Client{Timeout: 10 * time.Second}`) instead of relying on package-level HTTP functions.
+
+## 2024-05-27 - [Fix Unbounded JSON Decoding (OOM/DoS)]
+**Vulnerability:** In `internal/pkg/binance/api.go`, the application passed `resp.Body` directly to `json.NewDecoder().Decode()`. If the external Binance API was compromised, hijacked, or behaved unexpectedly by returning a massive payload, the application would load the entire JSON string into memory.
+**Learning:** This is a classic CWE-400 (Uncontrolled Resource Consumption) vulnerability. While `io.ReadAll` is often cited as a risk, `json.NewDecoder().Decode()` is equally dangerous when reading from an unbounded network stream like `http.Response.Body`.
+**Prevention:** Always wrap `http.Response.Body` with `io.LimitReader` or `http.MaxBytesReader` before passing it to parsers like `json.NewDecoder` when interacting with external or untrusted APIs. `http.MaxBytesReader` is preferable as it returns an explicit error when the limit is breached, rather than silently truncating the data like `io.LimitReader`.
