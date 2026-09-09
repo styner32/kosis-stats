@@ -343,12 +343,9 @@ func (a *FileAnalyzer) analyzeReportWithBatch(ctx context.Context, contents stri
 	}
 	defer outputResp.Body.Close()
 
-	outputData, err := io.ReadAll(outputResp.Body)
-	if err != nil {
-		return nil, 0, fmt.Errorf("read batch output: %w", err)
-	}
-
-	return parseBatchOutput(outputData, report)
+	// SECURITY: Stream parser using bufio.Scanner instead of io.ReadAll to process large batch
+	// outputs line-by-line, avoiding OOM/DoS vulnerabilities from unbounded HTTP responses.
+	return parseBatchOutputFromReader(outputResp.Body, report)
 }
 
 func (a *FileAnalyzer) waitForBatchCompletion(ctx context.Context, batchID string) (*openai.Batch, error) {
@@ -378,7 +375,11 @@ func (a *FileAnalyzer) waitForBatchCompletion(ctx context.Context, batchID strin
 }
 
 func parseBatchOutput(raw []byte, report interface{}) (interface{}, int64, error) {
-	scanner := bufio.NewScanner(bytes.NewReader(raw))
+	return parseBatchOutputFromReader(bytes.NewReader(raw), report)
+}
+
+func parseBatchOutputFromReader(r io.Reader, report interface{}) (interface{}, int64, error) {
+	scanner := bufio.NewScanner(r)
 	// Allow scanning large JSONL lines.
 	scanner.Buffer(make([]byte, 0, 1024*1024), 32*1024*1024)
 
