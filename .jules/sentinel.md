@@ -31,3 +31,13 @@
 **Vulnerability:** Usage of the default `http.Get` which implicitly uses `http.DefaultClient`. The default client lacks a timeout. If the external server hangs, connections can stay open indefinitely leading to goroutine leaks and resource exhaustion (DoS).
 **Learning:** Default HTTP clients in Go are unsuitable for production code when interacting with external networks. Timeouts must always be explicitly configured.
 **Prevention:** Always instantiate a custom `http.Client` with an explicit `Timeout` (e.g., `client := &http.Client{Timeout: 10 * time.Second}`) instead of relying on package-level HTTP functions.
+
+## 2026-09-14 - Prevent OOM Vulnerabilities with Bounded HTTP Reads in KOSIS API
+**Vulnerability:** The KOSIS API client () passed potentially large or malicious HTTP response bodies directly to  and  without size limits. This unbounded memory allocation could lead to Out-Of-Memory (OOM) exceptions and Denial of Service (DoS) attacks.
+**Learning:** Relying on the default behavior of  or  for external API responses is unsafe as it places unbounded trust in the external source's payload size.
+**Prevention:** Always bound external HTTP response reads using  before parsing them to ensure memory safety.
+
+## 2024-05-18 - Prevent OOM Vulnerabilities with Bounded HTTP Reads in KOSIS API
+**Vulnerability:** The KOSIS API client (`internal/pkg/kosis`) passed potentially large or malicious HTTP response bodies directly to `io.ReadAll` and `json.NewDecoder` without size limits. This unbounded memory allocation could lead to Out-Of-Memory (OOM) exceptions and Denial of Service (DoS) attacks.
+**Learning:** Relying on the default behavior of `io.ReadAll` or `json.NewDecoder` for external API responses is unsafe as it places unbounded trust in the external source's payload size.
+**Prevention:** Always bound external HTTP response reads using `http.MaxBytesReader(nil, resp.Body, maxBytes)` before parsing them to ensure memory safety.
