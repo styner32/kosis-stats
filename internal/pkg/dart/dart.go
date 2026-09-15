@@ -100,7 +100,9 @@ func (c *DartClient) getDisclosureList(corpCode, bgnDe, endDe string, pageNo, pa
 
 	var out ListResp
 
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	// SECURITY: Prevent OOM/DoS by bounding the response body size to 10MB
+	limitBody := http.MaxBytesReader(nil, resp.Body, 10*1024*1024)
+	if err := json.NewDecoder(limitBody).Decode(&out); err != nil {
 		return nil, err
 	}
 
@@ -127,7 +129,9 @@ func (c *DartClient) GetDocument(rceptNo string) (string, error) {
 	}
 	defer resp.Body.Close()
 
-	buf, err := io.ReadAll(resp.Body)
+	// SECURITY: Prevent OOM/DoS by bounding the response body size to 100MB
+	limitBody := http.MaxBytesReader(nil, resp.Body, 100*1024*1024)
+	buf, err := io.ReadAll(limitBody)
 	if err != nil {
 		return "", err
 	}
@@ -233,7 +237,9 @@ func (c *DartClient) GetCompanies() ([]Company, error) {
 	}
 	defer resp.Body.Close()
 
-	buf, err := io.ReadAll(resp.Body)
+	// SECURITY: Prevent OOM/DoS by bounding the response body size to 100MB
+	limitBody := http.MaxBytesReader(nil, resp.Body, 100*1024*1024)
+	buf, err := io.ReadAll(limitBody)
 	if err != nil {
 		return nil, err
 	}
