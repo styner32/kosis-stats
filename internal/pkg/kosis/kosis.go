@@ -105,6 +105,8 @@ func (c *Client) get(path string, q url.Values, v any) error {
 	}
 	defer resp.Body.Close()
 
+	// SECURITY: Limit response body reading to prevent OOM/DoS vulnerabilities
+	resp.Body = http.MaxBytesReader(nil, resp.Body, 5*1024*1024)
 	if resp.StatusCode >= 400 {
 		b, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("kosis http %d: %s", resp.StatusCode, string(b))
@@ -304,6 +306,8 @@ func (c *Client) makeRequest(url string, resBody interface{}) error {
 	}
 	defer resp.Body.Close()
 
+	// SECURITY: Limit response body reading to prevent OOM/DoS vulnerabilities
+	resp.Body = http.MaxBytesReader(nil, resp.Body, 5*1024*1024)
 	if resp.StatusCode != http.StatusOK {
 		errBody := &KosisSearchErrorResponse{}
 		if err := json.NewDecoder(resp.Body).Decode(errBody); err != nil {
