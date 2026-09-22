@@ -3,7 +3,6 @@ package dataapi
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -83,8 +82,9 @@ func (c *DataAPIClient) GetStockPrice(name string) (interface{}, error) {
 	defer resp.Body.Close()
 
 	// SECURITY: Stream JSON parsing to avoid Out Of Memory (OOM) vulnerabilities from io.ReadAll on large responses.
+	// Use http.MaxBytesReader to bound the read size and return an explicit error on limit exceeded.
 	var stockPriceResponse StockPriceResponse
-	if err := json.NewDecoder(io.LimitReader(resp.Body, 100*1024*1024)).Decode(&stockPriceResponse); err != nil {
+	if err := json.NewDecoder(http.MaxBytesReader(nil, resp.Body, 100*1024*1024)).Decode(&stockPriceResponse); err != nil {
 		log.Printf("failed to decode, err: %v, size: %v", err, resp.ContentLength)
 		return nil, err
 	}
