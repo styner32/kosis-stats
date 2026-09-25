@@ -105,12 +105,15 @@ func (c *Client) get(path string, q url.Values, v any) error {
 	}
 	defer resp.Body.Close()
 
+	// Security: bound the response body read to prevent OOM/DoS
+	safeBody := http.MaxBytesReader(nil, resp.Body, 100*1024*1024) // 100MB limit
+
 	if resp.StatusCode >= 400 {
-		b, _ := io.ReadAll(resp.Body)
+		b, _ := io.ReadAll(safeBody)
 		return fmt.Errorf("kosis http %d: %s", resp.StatusCode, string(b))
 	}
 
-	return json.NewDecoder(resp.Body).Decode(v)
+	return json.NewDecoder(safeBody).Decode(v)
 }
 
 type TableRef struct {
@@ -304,13 +307,16 @@ func (c *Client) makeRequest(url string, resBody interface{}) error {
 	}
 	defer resp.Body.Close()
 
+	// Security: bound the response body read to prevent OOM/DoS
+	safeBody := http.MaxBytesReader(nil, resp.Body, 100*1024*1024) // 100MB limit
+
 	if resp.StatusCode != http.StatusOK {
 		errBody := &KosisSearchErrorResponse{}
-		if err := json.NewDecoder(resp.Body).Decode(errBody); err != nil {
+		if err := json.NewDecoder(safeBody).Decode(errBody); err != nil {
 			return err
 		}
 		return fmt.Errorf("%s: %s", errBody.Err, errBody.ErrMsg)
 	}
 
-	return json.NewDecoder(resp.Body).Decode(resBody)
+	return json.NewDecoder(safeBody).Decode(resBody)
 }
