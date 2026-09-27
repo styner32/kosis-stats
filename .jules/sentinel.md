@@ -31,3 +31,9 @@
 **Vulnerability:** Usage of the default `http.Get` which implicitly uses `http.DefaultClient`. The default client lacks a timeout. If the external server hangs, connections can stay open indefinitely leading to goroutine leaks and resource exhaustion (DoS).
 **Learning:** Default HTTP clients in Go are unsuitable for production code when interacting with external networks. Timeouts must always be explicitly configured.
 **Prevention:** Always instantiate a custom `http.Client` with an explicit `Timeout` (e.g., `client := &http.Client{Timeout: 10 * time.Second}`) instead of relying on package-level HTTP functions.
+
+## 2026-06-29 - [OOM/DoS Vulnerability in API Response Parsing]
+
+**Vulnerability:** The application used `io.ReadAll` to read the entire HTTP response body from an external API (FRED) into memory before unmarshaling it. This makes the application vulnerable to Out of Memory (OOM) errors and Denial of Service (DoS) if the external API returns an unexpectedly large payload or is compromised.
+**Learning:** Even when interacting with trusted third-party APIs, response sizes should not be assumed to be small. Reading an unbounded stream entirely into memory is a common vector for resource exhaustion.
+**Prevention:** Avoid `io.ReadAll` for HTTP responses. Instead, wrap the response body in `http.MaxBytesReader` to strictly bound the maximum allowed size, and pass it to a streaming parser like `json.NewDecoder`.
