@@ -31,3 +31,8 @@
 **Vulnerability:** Usage of the default `http.Get` which implicitly uses `http.DefaultClient`. The default client lacks a timeout. If the external server hangs, connections can stay open indefinitely leading to goroutine leaks and resource exhaustion (DoS).
 **Learning:** Default HTTP clients in Go are unsuitable for production code when interacting with external networks. Timeouts must always be explicitly configured.
 **Prevention:** Always instantiate a custom `http.Client` with an explicit `Timeout` (e.g., `client := &http.Client{Timeout: 10 * time.Second}`) instead of relying on package-level HTTP functions.
+
+## 2026-06-30 - [OpenAI Batch File OOM & Streaming Constraint]
+**Vulnerability:** The application read entire OpenAI batch output files into memory at once using `io.ReadAll`, creating an Out of Memory (OOM) vulnerability for large files.
+**Learning:** External batch files containing trusted data shouldn't be constrained with `http.MaxBytesReader` because legitimate large files would be blocked and functionality degraded. Instead, they must be streamed directly using standard readers.
+**Prevention:** Pass `io.ReadCloser` (e.g. `resp.Body`) directly to a streaming parser like `bufio.Scanner` to process data chunk-by-chunk without loading the full payload into memory.
