@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"strconv"
@@ -62,14 +61,12 @@ func (c *FREDClient) GetHighYieldSpread() (map[string]float64, error) {
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
 	res := &HighYieldSpreadResponse{}
 
-	if err := json.Unmarshal(body, &res); err != nil {
+	// SECURITY: Stream JSON parsing to avoid Out Of Memory (OOM) vulnerabilities from io.ReadAll on large responses.
+	// Bounding the response body to 100MB to prevent memory exhaustion and silent truncation.
+	boundedBody := http.MaxBytesReader(nil, resp.Body, 100*1024*1024)
+	if err := json.NewDecoder(boundedBody).Decode(&res); err != nil {
 		return nil, err
 	}
 
